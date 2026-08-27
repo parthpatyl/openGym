@@ -27,11 +27,24 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".RestTimerReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="ch.duartesantos.opengym.ACTION_START" />
+                <action android:name="ch.duartesantos.opengym.ACTION_MINUS_15" />
+                <action android:name="ch.duartesantos.opengym.ACTION_PLUS_15" />
+                <action android:name="ch.duartesantos.opengym.ACTION_SKIP" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Workout-day reminder: lets the local-notifications plugin fire at the exact minute
          on Android 12+. Where it isn't granted, scheduling silently falls back to inexact
          alarms — the reminder still arrives, just not to the minute. -->

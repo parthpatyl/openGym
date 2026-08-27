@@ -10,8 +10,21 @@
 // Like the demo build, MOBILE is replaced at build time, so all of this folds away in
 // web bundles; the Capacitor plugins are only ever imported behind it.
 import { t } from './i18n.js'
+import { registerPlugin } from '@capacitor/core'
+import { ACCENTS } from './format.js'
 
 export const MOBILE = import.meta.env.VITE_MOBILE === '1'
+
+export const RestTimerNative = MOBILE ? registerPlugin('RestTimerNative') : null
+
+export function toTitleCase(str) {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
 
 const FILE = 'opengym-state.json'
 
@@ -58,6 +71,68 @@ export async function syncReminder(S, interactive = false) {
   } catch (e) { return false }
 }
 
+const clockStr = sec => Math.floor(Math.max(0, sec) / 60) + ':' + String(Math.max(0, sec) % 60).padStart(2, '0')
+
+// Register notification action buttons (-15s, +15s, Skip) and event listener for the rest timer
+export async function initMobileNotifications(store) {
+  if (!MOBILE || !RestTimerNative) return
+  try {
+    RestTimerNative.addListener('onRestAction', ({ action }) => {
+      if (action === 'skip' || action === 'completed') {
+        store.getState().stopRest()
+      } else if (action === 'plus15') {
+        store.getState().addRest(15)
+      } else if (action === 'minus15') {
+        store.getState().addRest(-15)
+      }
+    })
+  } catch (e) { /* ignore */ }
+}
+
+// Scheduled ongoing rest timer notification widget
+export async function scheduleRestNotification(seconds, meta = {}) {
+  if (!MOBILE || !RestTimerNative) return
+  try {
+    const rawName = meta.exercise || ''
+    const exName = toTitleCase(rawName)
+    const setInfo = meta.set ? (meta.totalSets ? `${t('Set')} ${meta.set}/${meta.totalSets}` : `${t('Set')} ${meta.set}`) : ''
+    const accentColor = (meta.accent && ACCENTS[meta.accent]) ? ACCENTS[meta.accent] : '#30d158'
+    await RestTimerNative.startRest({
+      seconds: Math.max(1, seconds),
+      exercise: exName,
+      set: setInfo,
+      accentColor: accentColor
+    })
+  } catch (e) { /* ignore */ }
+}
+
+export async function addRestNotification(seconds) {
+  if (!MOBILE || !RestTimerNative) return
+  try {
+    await RestTimerNative.addRest({ seconds })
+  } catch (e) { /* ignore */ }
+}
+
+export async function cancelRestNotification() {
+  if (!MOBILE || !RestTimerNative) return
+  try {
+    await RestTimerNative.stopRest()
+  } catch (e) { /* ignore */ }
+}
+
+export async function sendTestLocalNotification() {
+  if (!MOBILE || !RestTimerNative) return false
+  try {
+    await RestTimerNative.startRest({
+      seconds: 90,
+      exercise: 'Barbell Bench Press',
+      set: 'Set 2/4',
+      accentColor: '#30d158'
+    })
+    return true
+  } catch (e) { return false }
+}
+
 // WKWebView can't do blob-URL downloads, so the backup goes out through the OS share sheet
 // (Files, AirDrop, mail, …) from a temp file instead.
 export async function shareExport(json, filename) {
@@ -66,3 +141,4 @@ export async function shareExport(json, filename) {
   const w = await Filesystem.writeFile({ path: filename, directory: Directory.Cache, data: json, encoding: Encoding.UTF8 })
   await Share.share({ title: filename, url: w.uri })
 }
+
