@@ -52,15 +52,12 @@
         android:includeFontPadding="false"
         android:layout_marginBottom="6dp" />
 
-    <!-- Slim Rounded Progress Bar -->
-    <ProgressBar
+    <!-- Dynamic Themed Rounded Progress Bar -->
+    <ImageView
         android:id="@+id/notification_progress_bar"
-        style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="5dp"
-        android:max="100"
-        android:progress="100"
-        android:progressDrawable="@drawable/progress_bar_accent"
+        android:scaleType="fitXY"
         android:layout_marginBottom="12dp" />
 
     <!-- Bottom Row: Circular -15 / +15 and Pill Skip Capsule -->
@@ -103,19 +100,31 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- Elongated Pill Skip Capsule -->
-        <Button
+        <!-- Dynamic Pill Skip Capsule (matches chosen theme accent) -->
+        <FrameLayout
             android:id="@+id/btn_skip"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
-            android:minWidth="96dp"
-            android:text="Skip"
-            android:textColor="#000000"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:background="@drawable/bg_btn_accent"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp" />
+            android:minWidth="96dp">
+
+            <ImageView
+                android:id="@+id/btn_skip_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY" />
+
+            <TextView
+                android:id="@+id/btn_skip_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Skip"
+                android:textColor="#000000"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp" />
+        </FrameLayout>
     </LinearLayout>
 
 </LinearLayout>

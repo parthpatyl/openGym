@@ -13,7 +13,7 @@ import { t } from './i18n.js'
 import { registerPlugin } from '@capacitor/core'
 import { ACCENTS } from './format.js'
 
-export const MOBILE = import.meta.env.VITE_MOBILE === '1'
+export const MOBILE = import.meta.env.VITE_MOBILE === '1' || (typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.())
 
 export const RestTimerNative = MOBILE ? registerPlugin('RestTimerNative') : null
 

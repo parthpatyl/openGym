@@ -5,8 +5,11 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -186,6 +189,61 @@ public class RestTimerManager {
         return sb.toString();
     }
 
+    private Bitmap createPillBitmap(int color, int widthDp, int heightDp, float cornerRadiusDp) {
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int widthPx = Math.max(1, (int) (widthDp * density));
+            int heightPx = Math.max(1, (int) (heightDp * density));
+            float cornerRadiusPx = cornerRadiusDp * density;
+
+            Bitmap bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(color);
+            paint.setStyle(Paint.Style.FILL);
+            RectF rect = new RectF(0, 0, widthPx, heightPx);
+            canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint);
+            return bitmap;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Bitmap createProgressBarBitmap(int color, int progressPercent, int widthDp, int heightDp) {
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int widthPx = Math.max(10, (int) (widthDp * density));
+            int heightPx = Math.max(2, (int) (heightDp * density));
+            float radius = heightPx / 2f;
+
+            Bitmap bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+
+            // Track background (dark neutral)
+            Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            trackPaint.setColor(Color.parseColor("#2C2C2E"));
+            RectF fullRect = new RectF(0, 0, widthPx, heightPx);
+            canvas.drawRoundRect(fullRect, radius, radius, trackPaint);
+
+            // Progress fill (theme accent color)
+            if (progressPercent > 0) {
+                Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+                progressPaint.setColor(color);
+                float fillWidth = (widthPx * Math.min(100, Math.max(0, progressPercent))) / 100f;
+                RectF progressRect = new RectF(0, 0, fillWidth, heightPx);
+                canvas.drawRoundRect(progressRect, radius, radius, progressPaint);
+            }
+            return bitmap;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private int getContrastTextColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+        return luminance > 0.5 ? Color.BLACK : Color.WHITE;
+    }
+
     private void updateNotification() {
         int remaining = getRemainingSeconds();
         int minutes = remaining / 60;
@@ -221,13 +279,26 @@ public class RestTimerManager {
             }
         } catch (Exception ignored) {}
 
+        int skipTextColor = getContrastTextColor(themeColor);
+        Bitmap skipPillBmpExpanded = createPillBitmap(themeColor, 96, 40, 20);
+        Bitmap skipPillBmpCollapsed = createPillBitmap(themeColor, 64, 34, 17);
+        Bitmap progressBarBmp = createProgressBarBitmap(themeColor, progress, 300, 5);
+
         // Expanded RemoteViews
         RemoteViews expandedView = new RemoteViews(context.getPackageName(), R.layout.notification_rest_timer);
         expandedView.setTextViewText(R.id.notification_exercise_name, formattedExercise);
         expandedView.setTextViewText(R.id.notification_set_info, setInfo);
         expandedView.setTextColor(R.id.notification_set_info, themeColor);
         expandedView.setTextViewText(R.id.notification_timer_text, timeStr);
-        expandedView.setProgressBar(R.id.notification_progress_bar, 100, progress, false);
+
+        if (progressBarBmp != null) {
+            expandedView.setImageViewBitmap(R.id.notification_progress_bar, progressBarBmp);
+        }
+
+        if (skipPillBmpExpanded != null) {
+            expandedView.setImageViewBitmap(R.id.btn_skip_bg, skipPillBmpExpanded);
+        }
+        expandedView.setTextColor(R.id.btn_skip_text, skipTextColor);
 
         expandedView.setOnClickPendingIntent(R.id.btn_minus_15, minusPending);
         expandedView.setOnClickPendingIntent(R.id.btn_plus_15, plusPending);
@@ -237,6 +308,12 @@ public class RestTimerManager {
         RemoteViews collapsedView = new RemoteViews(context.getPackageName(), R.layout.notification_rest_timer_collapsed);
         collapsedView.setTextViewText(R.id.notification_subtitle, subtitle);
         collapsedView.setTextViewText(R.id.notification_timer_text, timeStr);
+
+        if (skipPillBmpCollapsed != null) {
+            collapsedView.setImageViewBitmap(R.id.btn_skip_bg, skipPillBmpCollapsed);
+        }
+        collapsedView.setTextColor(R.id.btn_skip_text, skipTextColor);
+
         collapsedView.setOnClickPendingIntent(R.id.btn_plus_15, plusPending);
         collapsedView.setOnClickPendingIntent(R.id.btn_skip, skipPending);
 
@@ -255,7 +332,6 @@ public class RestTimerManager {
                 .setPriority(NotificationCompat.PRIORITY_HIGH);
 
         try {
-            android.util.Log.d("RestTimer", "Posting notification id=" + NOTIFICATION_ID + " time=" + timeStr);
             notificationManager.notify(NOTIFICATION_ID, builder.build());
         } catch (Exception ex) {
             android.util.Log.e("RestTimer", "Error posting notification", ex);
