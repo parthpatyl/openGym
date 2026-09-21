@@ -152,6 +152,20 @@ export default function Settings() {
           onChange={v => update(s => { s.theme = v })}
         />
       </Row>
+      {MOBILE && (
+        <Row icon="sparkles" iconTint="var(--acc)" title={t('Widget theme')}>
+          <Segmented
+            className="seg-inline"
+            options={[
+              { value: 'auto', label: t('Auto') },
+              { value: 'dark', icon: 'moon', label: t('Dark') },
+              { value: 'light', icon: 'sun', label: t('Light') }
+            ]}
+            value={S.widgetTheme || 'auto'}
+            onChange={v => update(s => { s.widgetTheme = v })}
+          />
+        </Row>
+      )}
       {/* Purely how the muscle map is drawn — nothing else in the app reads this. */}
       <Row icon="figureStrength" iconTint="var(--teal)" title={t('Body diagram')}>
         <Segmented
