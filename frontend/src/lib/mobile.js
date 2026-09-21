@@ -16,6 +16,7 @@ import { ACCENTS } from './format.js'
 export const MOBILE = import.meta.env.VITE_MOBILE === '1' || (typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.())
 
 export const RestTimerNative = MOBILE ? registerPlugin('RestTimerNative') : null
+export const WorkoutWidgetNative = MOBILE ? registerPlugin('WorkoutWidgetNative') : null
 
 export function toTitleCase(str) {
   if (!str) return ''
@@ -36,11 +37,36 @@ export async function nativeLoad() {
   } catch (e) { return null }   // first launch, or unreadable — localStorage copy takes over
 }
 
+export async function updateWidgetNative() {
+  if (!MOBILE || !WorkoutWidgetNative) return
+  try {
+    await WorkoutWidgetNative.updateWidget()
+  } catch (e) { /* ignore */ }
+}
+
+let isSaving = false
+let queuedState = null
+
 export async function nativeSave(state) {
+  if (!MOBILE) return
+  if (isSaving) {
+    queuedState = state
+    return
+  }
+  isSaving = true
   try {
     const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
     await Filesystem.writeFile({ path: FILE, directory: Directory.Data, data: JSON.stringify(state), encoding: Encoding.UTF8 })
+    updateWidgetNative()
   } catch (e) { /* keep the localStorage copy */ }
+  finally {
+    isSaving = false
+    if (queuedState) {
+      const next = queuedState
+      queuedState = null
+      nativeSave(next)
+    }
+  }
 }
 
 // (Re)schedule the workout-day reminder: one repeating notification per weekday that has a
@@ -75,17 +101,28 @@ const clockStr = sec => Math.floor(Math.max(0, sec) / 60) + ':' + String(Math.ma
 
 // Register notification action buttons (-15s, +15s, Skip) and event listener for the rest timer
 export async function initMobileNotifications(store) {
-  if (!MOBILE || !RestTimerNative) return
+  if (!MOBILE) return
   try {
-    RestTimerNative.addListener('onRestAction', ({ action }) => {
-      if (action === 'skip' || action === 'completed') {
-        store.getState().stopRest()
-      } else if (action === 'plus15') {
-        store.getState().addRest(15)
-      } else if (action === 'minus15') {
-        store.getState().addRest(-15)
-      }
-    })
+    if (RestTimerNative) {
+      RestTimerNative.addListener('onRestAction', ({ action }) => {
+        if (action === 'skip' || action === 'completed') {
+          store.getState().stopRest()
+        } else if (action === 'plus15') {
+          store.getState().addRest(15)
+        } else if (action === 'minus15') {
+          store.getState().addRest(-15)
+        }
+      })
+    }
+    if (WorkoutWidgetNative) {
+      WorkoutWidgetNative.addListener('onWidgetStateChanged', async () => {
+        const st = await nativeLoad()
+        if (st) {
+          const { useStore } = await import('../store/useStore.js')
+          useStore.getState().replaceState(st, false)
+        }
+      })
+    }
   } catch (e) { /* ignore */ }
 }
 

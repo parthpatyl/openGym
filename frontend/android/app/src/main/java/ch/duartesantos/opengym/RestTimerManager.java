@@ -125,11 +125,33 @@ public class RestTimerManager {
         try {
             notificationManager.cancel(NOTIFICATION_ID);
         } catch (Exception ignored) {}
+        WorkoutWidgetManager.updateAllWidgets(context);
     }
 
-    private int getRemainingSeconds() {
+    public synchronized boolean isRunning() {
+        return isRunning;
+    }
+
+    public synchronized int getRemainingSeconds() {
+        if (!isRunning) return 0;
         long now = System.currentTimeMillis();
         return (int) Math.max(0, (endsAtMs - now + 999) / 1000);
+    }
+
+    public synchronized int getTotalDurationSec() {
+        return totalDurationSec;
+    }
+
+    public synchronized String getExerciseName() {
+        return exerciseName;
+    }
+
+    public synchronized String getSetInfo() {
+        return setInfo;
+    }
+
+    public synchronized String getAccentColor() {
+        return accentColor;
     }
 
     private final Runnable tickRunnable = new Runnable() {
@@ -144,6 +166,7 @@ public class RestTimerManager {
                 return;
             }
             updateNotification();
+            WorkoutWidgetManager.updateAllWidgets(context);
             handler.postDelayed(this, 1000);
         }
     };

@@ -11,15 +11,23 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RestTimerPlugin.class);
+        registerPlugin(WorkoutWidgetPlugin.class);
         super.onCreate(savedInstanceState);
 
         RestTimerManager.getInstance(this);
+        WorkoutWidgetManager.updateAllWidgets(this);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
             }
         }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        WorkoutWidgetManager.updateAllWidgets(this);
     }
 }
 

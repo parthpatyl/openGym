@@ -38,6 +38,24 @@
                 <action android:name="ch.duartesantos.opengym.ACTION_SKIP" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".WorkoutWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_WEIGHT_MINUS" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_WEIGHT_PLUS" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REPS_MINUS" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REPS_PLUS" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_LOG_SET" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REST_PLUS_15" />
+                <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REST_SKIP" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/workout_widget_info" />
+        </receiver>
     </application>
 
     <!-- Permissions -->

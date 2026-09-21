@@ -105,6 +105,47 @@ function Shell() {
     }
   }, [navigate])
 
+  // Resume / foreground sync: reload state when app returns from background (e.g. after widget interactions)
+  useEffect(() => {
+    if (!MOBILE) return
+    let appHandle = null
+
+    const syncFromDisk = async () => {
+      try {
+        const { nativeLoad } = await import('./lib/mobile.js')
+        const saved = await nativeLoad()
+        if (saved) {
+          const curr = useStore.getState().S
+          if ((saved._ts || 0) > (curr?._ts || 0) || JSON.stringify(saved.active) !== JSON.stringify(curr?.active)) {
+            useStore.getState().replaceState(saved, false)
+          }
+        }
+      } catch (e) {}
+    }
+
+    const initAppListener = async () => {
+      try {
+        const { App } = await import('@capacitor/app')
+        appHandle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) syncFromDisk()
+        })
+      } catch (e) {}
+    }
+    initAppListener()
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') syncFromDisk()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onVis)
+
+    return () => {
+      if (appHandle && typeof appHandle.remove === 'function') appHandle.remove()
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onVis)
+    }
+  }, [])
+
   const authed = user || isGuest
   if (!ready && !authed) return (
     <div id="app">
