@@ -3,17 +3,32 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_widget_card"
-    android:paddingStart="14dp"
-    android:paddingEnd="14dp"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp">
+    android:animateLayoutChanges="true"
+    android:background="@drawable/bg_widget_card">
+
+    <!-- Themed Background Layer with Repeating Athletic SVG Pattern -->
+    <ImageView
+        android:id="@+id/widget_bg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY" />
+
+    <!-- Content Padding Wrapper -->
+    <FrameLayout
+        android:id="@+id/widget_content_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
     <!-- ==================== 1. ACTIVE WORKOUT STATE ==================== -->
     <LinearLayout
         android:id="@+id/widget_layout_active"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
         android:visibility="visible">
 
@@ -25,6 +40,7 @@
             android:gravity="center_vertical">
 
             <TextView
+                android:id="@+id/widget_active_eyebrow"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -94,6 +110,7 @@
                     android:id="@+id/widget_btn_weight_minus"
                     android:layout_width="40dp"
                     android:layout_height="match_parent"
+                    android:background="@drawable/bg_stepper_touch"
                     android:gravity="center"
                     android:text="−"
                     android:textColor="#FFFFFF"
@@ -116,6 +133,7 @@
                     android:id="@+id/widget_btn_weight_plus"
                     android:layout_width="40dp"
                     android:layout_height="match_parent"
+                    android:background="@drawable/bg_stepper_touch"
                     android:gravity="center"
                     android:text="+"
                     android:textColor="#FFFFFF"
@@ -137,6 +155,7 @@
                     android:id="@+id/widget_btn_reps_minus"
                     android:layout_width="40dp"
                     android:layout_height="match_parent"
+                    android:background="@drawable/bg_stepper_touch"
                     android:gravity="center"
                     android:text="−"
                     android:textColor="#FFFFFF"
@@ -159,6 +178,7 @@
                     android:id="@+id/widget_btn_reps_plus"
                     android:layout_width="40dp"
                     android:layout_height="match_parent"
+                    android:background="@drawable/bg_stepper_touch"
                     android:gravity="center"
                     android:text="+"
                     android:textColor="#FFFFFF"
@@ -220,6 +240,7 @@
         android:id="@+id/widget_layout_rest"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
         android:visibility="gone">
 
@@ -331,17 +352,29 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <TextView
-                android:id="@+id/widget_btn_rest_plus_15"
+            <FrameLayout
+                android:id="@+id/widget_btn_rest_plus_15_container"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:background="@drawable/bg_btn_dark"
-                android:gravity="center"
-                android:text="+15s"
-                android:textColor="#FFFFFF"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/widget_btn_rest_plus_15_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/bg_btn_dark" />
+
+                <TextView
+                    android:id="@+id/widget_btn_rest_plus_15"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:text="+15s"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
             <FrameLayout
                 android:id="@+id/widget_btn_rest_skip_container"
@@ -375,6 +408,7 @@
         android:id="@+id/widget_layout_complete"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
         android:visibility="gone">
 
@@ -409,6 +443,7 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/widget_complete_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Workout Complete! 🎉"
@@ -418,6 +453,7 @@
             android:layout_marginTop="6dp" />
 
         <TextView
+            android:id="@+id/widget_complete_sub"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="All sets completed. Tap below to review."
@@ -461,10 +497,11 @@
         android:id="@+id/widget_layout_standby"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:animateLayoutChanges="true"
         android:orientation="vertical"
         android:visibility="gone">
 
-        <!-- Standby Header: App Brand + Status Capsule Badge -->
+        <!-- Standby Header: Minimal Greeting Eyebrow + Reminder Pill + Status Capsule Badge -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -472,14 +509,31 @@
             android:gravity="center_vertical">
 
             <TextView
+                android:id="@+id/widget_standby_eyebrow"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="OPENGYM"
+                android:text="GOOD MORNING"
                 android:textColor="#8E8E93"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
+
+            <TextView
+                android:id="@+id/widget_standby_reminder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:layout_marginEnd="6dp"
+                android:text="🔔 08:00"
+                android:textColor="#FF9F0A"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/widget_standby_badge"
@@ -649,4 +703,5 @@
         </FrameLayout>
     </LinearLayout>
 
+    </FrameLayout>
 </FrameLayout>

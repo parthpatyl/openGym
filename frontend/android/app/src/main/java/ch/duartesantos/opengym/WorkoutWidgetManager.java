@@ -1,15 +1,20 @@
 package ch.duartesantos.opengym;
 
+import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.os.Build;
 import android.util.Log;
 import android.view.View;
@@ -43,6 +48,8 @@ public class WorkoutWidgetManager {
     public static final String ACTION_REST_PLUS_15 = "ch.duartesantos.opengym.WIDGET_ACTION_REST_PLUS_15";
     public static final String ACTION_REST_SKIP = "ch.duartesantos.opengym.WIDGET_ACTION_REST_SKIP";
     public static final String ACTION_OPEN_APP = "ch.duartesantos.opengym.WIDGET_ACTION_OPEN_APP";
+    public static final String ACTION_START_WORKOUT = "ch.duartesantos.opengym.ACTION_START_WORKOUT";
+    public static final String ACTION_MIDNIGHT_RESET = "ch.duartesantos.opengym.ACTION_MIDNIGHT_RESET";
 
     private static final Map<String, String> ACCENTS = new HashMap<>();
     static {
@@ -361,15 +368,130 @@ public class WorkoutWidgetManager {
         }
     }
 
-    public static RemoteViews buildRemoteViews(Context context) {
-        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_workout);
+    private static boolean isColorLight(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+        return luminance > 0.5;
+    }
 
-        // App launch pending intent
+    private static Bitmap createWidgetBackgroundBitmap(Context context, boolean isLight, int widthDp, int heightDp) {
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int widthPx = Math.max(1, (int) (widthDp * density));
+            int heightPx = Math.max(1, (int) (heightDp * density));
+            float cornerRadiusPx = 22f * density;
+
+            // 1. Repeating SVG athletic diamond mesh tile (24dp x 24dp)
+            int tileDp = 24;
+            int tilePx = Math.max(8, (int) (tileDp * density));
+            Bitmap tileBmp = Bitmap.createBitmap(tilePx, tilePx, Bitmap.Config.ARGB_8888);
+            Canvas tileCanvas = new Canvas(tileBmp);
+
+            Paint patternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            patternPaint.setStyle(Paint.Style.STROKE);
+            patternPaint.setStrokeWidth(1f * density);
+            // 4% opacity: subtle texture that does not hurt readability
+            patternPaint.setColor(isLight ? Color.argb(12, 0, 0, 0) : Color.argb(14, 255, 255, 255));
+
+            float half = tilePx / 2f;
+            Path diamondPath = new Path();
+            diamondPath.moveTo(half, 0);
+            diamondPath.lineTo(tilePx, half);
+            diamondPath.lineTo(half, tilePx);
+            diamondPath.lineTo(0, half);
+            diamondPath.close();
+            tileCanvas.drawPath(diamondPath, patternPaint);
+
+            Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            dotPaint.setStyle(Paint.Style.FILL);
+            dotPaint.setColor(isLight ? Color.argb(10, 0, 0, 0) : Color.argb(12, 255, 255, 255));
+            tileCanvas.drawCircle(half, half, 1.2f * density, dotPaint);
+
+            // 2. Draw card background with tiled shader, border, and rounded corners
+            Bitmap cardBmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
+            Canvas cardCanvas = new Canvas(cardBmp);
+
+            RectF cardRect = new RectF(1f * density, 1f * density, widthPx - 1f * density, heightPx - 1f * density);
+            Path clipPath = new Path();
+            clipPath.addRoundRect(cardRect, cornerRadiusPx, cornerRadiusPx, Path.Direction.CW);
+
+            // Base fill
+            Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            bgPaint.setColor(isLight ? Color.parseColor("#FFFFFF") : Color.parseColor("#121316"));
+            bgPaint.setStyle(Paint.Style.FILL);
+            cardCanvas.drawPath(clipPath, bgPaint);
+
+            // Repeating Pattern fill (clipped to rounded card)
+            cardCanvas.save();
+            cardCanvas.clipPath(clipPath);
+            Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            BitmapShader shader = new BitmapShader(tileBmp, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+            shaderPaint.setShader(shader);
+            cardCanvas.drawRect(cardRect, shaderPaint);
+            cardCanvas.restore();
+
+            // Border stroke
+            Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            borderPaint.setStyle(Paint.Style.STROKE);
+            borderPaint.setStrokeWidth(1.2f * density);
+            borderPaint.setColor(isLight ? Color.parseColor("#E5E5EA") : Color.parseColor("#26282E"));
+            cardCanvas.drawRoundRect(cardRect, cornerRadiusPx, cornerRadiusPx, borderPaint);
+
+            return cardBmp;
+        } catch (Exception e) {
+            Log.e(TAG, "Error generating widget background bitmap", e);
+            return null;
+        }
+    }
+
+    public static RemoteViews buildRemoteViews(Context context) {
+        scheduleMidnightReset(context);
+
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_workout);
+        JSONObject state = loadState(context);
+
+        // Determine Theme (Light / Dark)
+        String widgetTheme = state != null ? state.optString("widgetTheme", "auto") : "auto";
+        boolean isLight;
+        if ("light".equalsIgnoreCase(widgetTheme)) {
+            isLight = true;
+        } else if ("dark".equalsIgnoreCase(widgetTheme)) {
+            isLight = false;
+        } else {
+            String appTheme = state != null ? state.optString("theme", "dark") : "dark";
+            if ("light".equalsIgnoreCase(appTheme)) {
+                isLight = true;
+            } else {
+                int nightMode = context.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+                isLight = (nightMode == Configuration.UI_MODE_NIGHT_NO);
+            }
+        }
+
+        int textPrimary = isLight ? Color.parseColor("#1C1C1E") : Color.WHITE;
+        int textSecondary = isLight ? Color.parseColor("#636366") : Color.parseColor("#8E8E93");
+        int textTertiary = isLight ? Color.parseColor("#8E8E93") : Color.parseColor("#636366");
+        int secondaryBg = isLight ? Color.parseColor("#E5E5EA") : Color.parseColor("#24262C");
+        int secondaryText = isLight ? Color.parseColor("#1C1C1E") : Color.WHITE;
+        int trackColor = isLight ? Color.parseColor("#E5E5EA") : Color.parseColor("#24262C");
+
+        // Dynamic Pattern Background
+        Bitmap bgBmp = createWidgetBackgroundBitmap(context, isLight, 360, 190);
+        if (bgBmp != null) {
+            views.setImageViewBitmap(R.id.widget_bg_image, bgBmp);
+        }
+
+        // App launch pending intent (regular tap on background opens app)
         Intent appIntent = new Intent(context, MainActivity.class);
         appIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         int flags = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) ? (PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE) : PendingIntent.FLAG_UPDATE_CURRENT;
         PendingIntent openAppPending = PendingIntent.getActivity(context, 1001, appIntent, flags);
         views.setOnClickPendingIntent(R.id.widget_root, openAppPending);
+
+        // Dedicated Start Workout Pending Intent (Deep Link -> Auto opens Quick Check-in modal!)
+        Intent startIntent = new Intent(context, MainActivity.class);
+        startIntent.setAction(ACTION_START_WORKOUT);
+        startIntent.putExtra("autoStart", true);
+        startIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent startWorkoutPending = PendingIntent.getActivity(context, 1002, startIntent, flags);
 
         RestTimerManager timerManager = RestTimerManager.getInstance(context);
         boolean isResting = timerManager.isRunning();
@@ -384,12 +506,13 @@ public class WorkoutWidgetManager {
             int remaining = timerManager.getRemainingSeconds();
             String timeStr = String.format(Locale.getDefault(), "%02d:%02d", remaining / 60, remaining % 60);
             views.setTextViewText(R.id.widget_rest_countdown, timeStr);
+            views.setTextColor(R.id.widget_rest_countdown, textPrimary);
 
             String accentHex = timerManager.getAccentColor();
             int themeColor = parseColorSafe(accentHex, "#30D158");
             views.setTextColor(R.id.widget_rest_status, themeColor);
+            views.setTextColor(R.id.widget_rest_next_set_badge, textSecondary);
 
-            JSONObject state = loadState(context);
             ActiveSetInfo nextInfo = getActiveSetInfo(state);
             String nextExerciseName = "";
             String nextTargetShort = "";
@@ -413,20 +536,32 @@ public class WorkoutWidgetManager {
                 nextSub = nextTargetShort;
             }
             views.setTextViewText(R.id.widget_rest_next_exercise, nextTitle);
+            views.setTextColor(R.id.widget_rest_next_exercise, textPrimary);
             views.setTextViewText(R.id.widget_rest_next_subtext, nextSub);
+            views.setTextColor(R.id.widget_rest_next_subtext, textSecondary);
 
             // Progress bar: edge-to-edge (match_parent → use max widget content width ~360dp)
             int total = Math.max(1, timerManager.getTotalDurationSec());
             float progressPercent = ((float) (total - remaining)) / ((float) total);
-            Bitmap barBmp = createProgressBarBitmap(context, themeColor, parseColorSafe("#24262C", "#24262C"), 360, 5, progressPercent, 2.5f);
+            Bitmap barBmp = createProgressBarBitmap(context, themeColor, trackColor, 360, 5, progressPercent, 2.5f);
             if (barBmp != null) {
                 views.setImageViewBitmap(R.id.widget_rest_progress_bar, barBmp);
+            }
+
+            // Buttons: +15s & Skip Rest
+            views.setTextColor(R.id.widget_btn_rest_plus_15, secondaryText);
+            views.setTextColor(R.id.widget_btn_rest_skip, secondaryText);
+            Bitmap btnBgBmp = createPillBitmap(context, secondaryBg, 150, 42, 21f);
+            if (btnBgBmp != null) {
+                views.setImageViewBitmap(R.id.widget_btn_rest_plus_15_bg, btnBgBmp);
+                views.setImageViewBitmap(R.id.widget_btn_rest_skip_bg, btnBgBmp);
             }
 
             // +15s pending intent
             Intent plusIntent = new Intent(context, WorkoutWidgetProvider.class);
             plusIntent.setAction(ACTION_REST_PLUS_15);
             PendingIntent plusPending = PendingIntent.getBroadcast(context, 1002, plusIntent, flags);
+            views.setOnClickPendingIntent(R.id.widget_btn_rest_plus_15_container, plusPending);
             views.setOnClickPendingIntent(R.id.widget_btn_rest_plus_15, plusPending);
 
             // Skip pending intent
@@ -439,10 +574,9 @@ public class WorkoutWidgetManager {
             return views;
         }
 
-        JSONObject state = loadState(context);
         ActiveSetInfo info = getActiveSetInfo(state);
-        String accentHex = getAccentHex(state);
-        int themeColor = parseColorSafe(accentHex, "#30D158");
+        String accentKey = state != null ? state.optString("accent", "lime") : "lime";
+        int themeColor = parseColorSafe(ACCENTS.get(accentKey), "#30D158");
 
         if (info != null && info.allWorkoutDone) {
             // ==================== WORKOUT COMPLETE STATE ====================
@@ -451,10 +585,14 @@ public class WorkoutWidgetManager {
             views.setViewVisibility(R.id.widget_layout_rest, View.GONE);
             views.setViewVisibility(R.id.widget_layout_standby, View.GONE);
 
+            views.setTextColor(R.id.widget_complete_title, textPrimary);
+            views.setTextColor(R.id.widget_complete_sub, textSecondary);
+
             Bitmap completeBtnBmp = createPillBitmap(context, themeColor, 320, 42, 21f);
             if (completeBtnBmp != null) {
                 views.setImageViewBitmap(R.id.widget_btn_finish_review_bg, completeBtnBmp);
             }
+            views.setTextColor(R.id.widget_btn_finish_review, isColorLight(themeColor) ? Color.BLACK : Color.WHITE);
             views.setOnClickPendingIntent(R.id.widget_btn_finish_review_container, openAppPending);
             views.setOnClickPendingIntent(R.id.widget_btn_finish_review, openAppPending);
             return views;
@@ -467,23 +605,33 @@ public class WorkoutWidgetManager {
             views.setViewVisibility(R.id.widget_layout_complete, View.GONE);
             views.setViewVisibility(R.id.widget_layout_standby, View.GONE);
 
+            views.setTextColor(R.id.widget_active_eyebrow, textSecondary);
             views.setTextViewText(R.id.widget_active_exercise, info.exerciseName);
+            views.setTextColor(R.id.widget_active_exercise, textPrimary);
             views.setTextViewText(R.id.widget_active_set_badge, "EX " + (info.entryIndex + 1) + "/" + info.totalEntries + " · SET " + (info.setIndex + 1) + "/" + info.totalSetsInEntry);
             views.setTextColor(R.id.widget_active_set_badge, themeColor);
 
             // Format weight (e.g. "80 kg" or "82.5 kg")
             String weightStr = (info.weight == (long) info.weight ? String.format(Locale.getDefault(), "%d", (long) info.weight) : String.format(Locale.getDefault(), "%.1f", info.weight)) + " " + info.unit;
             views.setTextViewText(R.id.widget_text_weight_val, weightStr);
+            views.setTextColor(R.id.widget_text_weight_val, textPrimary);
 
             // Format reps
             String repsStr = info.reps + " reps";
             views.setTextViewText(R.id.widget_text_reps_val, repsStr);
+            views.setTextColor(R.id.widget_text_reps_val, textPrimary);
 
             views.setTextViewText(R.id.widget_active_target, "Target: " + weightStr + " × " + repsStr);
+            views.setTextColor(R.id.widget_active_target, textSecondary);
+
+            views.setTextColor(R.id.widget_btn_weight_minus, textPrimary);
+            views.setTextColor(R.id.widget_btn_weight_plus, textPrimary);
+            views.setTextColor(R.id.widget_btn_reps_minus, textPrimary);
+            views.setTextColor(R.id.widget_btn_reps_plus, textPrimary);
 
             // Exercise set progress indicator (320dp content - 32dp margins = 288dp bar)
             float setProgress = (float) (info.setIndex + 1) / (float) Math.max(1, info.totalSetsInEntry);
-            Bitmap activeBarBmp = createProgressBarBitmap(context, themeColor, parseColorSafe("#24262C", "#24262C"), 288, 5, setProgress, 2.5f);
+            Bitmap activeBarBmp = createProgressBarBitmap(context, themeColor, trackColor, 288, 5, setProgress, 2.5f);
             if (activeBarBmp != null) {
                 views.setImageViewBitmap(R.id.widget_active_progress_bar, activeBarBmp);
             }
@@ -521,6 +669,7 @@ public class WorkoutWidgetManager {
             if (logBtnBmp != null) {
                 views.setImageViewBitmap(R.id.widget_btn_log_bg, logBtnBmp);
             }
+            views.setTextColor(R.id.widget_btn_log_text, isColorLight(themeColor) ? Color.BLACK : Color.WHITE);
 
             return views;
         }
@@ -530,6 +679,21 @@ public class WorkoutWidgetManager {
         views.setViewVisibility(R.id.widget_layout_active, View.GONE);
         views.setViewVisibility(R.id.widget_layout_rest, View.GONE);
         views.setViewVisibility(R.id.widget_layout_complete, View.GONE);
+
+        Calendar now = Calendar.getInstance();
+        int hour = now.get(Calendar.HOUR_OF_DAY);
+
+        // Active workout reminder badge
+        JSONObject reminder = state != null ? state.optJSONObject("reminder") : null;
+        boolean reminderOn = reminder != null && reminder.optBoolean("on", false);
+        String reminderTime = reminder != null ? reminder.optString("time", "08:00") : "";
+        if (reminderOn && !reminderTime.isEmpty()) {
+            views.setViewVisibility(R.id.widget_standby_reminder, View.VISIBLE);
+            views.setTextViewText(R.id.widget_standby_reminder, "🔔 " + reminderTime);
+            views.setTextColor(R.id.widget_standby_reminder, themeColor);
+        } else {
+            views.setViewVisibility(R.id.widget_standby_reminder, View.GONE);
+        }
 
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
         String todayISO = sdf.format(new Date());
@@ -552,9 +716,25 @@ public class WorkoutWidgetManager {
             }
         }
 
+        // Apply theme colors to stat texts
+        views.setTextColor(R.id.widget_standby_eyebrow, textSecondary);
+        views.setTextColor(R.id.widget_standby_title, textPrimary);
+        views.setTextColor(R.id.widget_standby_stat1_val, textPrimary);
+        views.setTextColor(R.id.widget_standby_stat1_lbl, textSecondary);
+        views.setTextColor(R.id.widget_standby_stat2_val, textPrimary);
+        views.setTextColor(R.id.widget_standby_stat2_lbl, textSecondary);
+        views.setTextColor(R.id.widget_standby_stat3_val, textPrimary);
+        views.setTextColor(R.id.widget_standby_stat3_lbl, textSecondary);
+        views.setTextColor(R.id.widget_standby_last_summary, textSecondary);
+
+        // Hook up Start Workout CTA to startWorkoutPending (Direct launch into Quick Check-in!)
+        views.setOnClickPendingIntent(R.id.widget_btn_start_container, startWorkoutPending);
+        views.setOnClickPendingIntent(R.id.widget_btn_start_workout, startWorkoutPending);
+
         if (todayW != null) {
             // Case 1: Workout completed today! (Apple Fitness summary style)
-            views.setTextViewText(R.id.widget_standby_badge, "COMPLETED TODAY");
+            views.setTextViewText(R.id.widget_standby_eyebrow, "SESSION COMPLETED");
+            views.setTextViewText(R.id.widget_standby_badge, "CRUSHED");
             views.setTextColor(R.id.widget_standby_badge, themeColor);
 
             String wName = todayW.optString("name", "Workout");
@@ -579,7 +759,6 @@ public class WorkoutWidgetManager {
             long durMin = (startMs > 0 && endMs > startMs) ? (endMs - startMs) / 60000 : 0;
             String unit = state != null ? state.optString("unit", "lb") : "lb";
 
-            // Populate Apple Fitness 3-stat metric tiles
             views.setTextViewText(R.id.widget_standby_stat1_val, String.valueOf(completedSets));
             views.setTextViewText(R.id.widget_standby_stat1_lbl, "SETS");
 
@@ -589,14 +768,15 @@ public class WorkoutWidgetManager {
             views.setTextViewText(R.id.widget_standby_stat3_val, durMin > 0 ? (durMin + "m") : "—");
             views.setTextViewText(R.id.widget_standby_stat3_lbl, "DURATION");
 
-            views.setTextViewText(R.id.widget_standby_last_summary, "Completed session today");
+            String sessionSummary = reminderOn ? ("Crushed today · 🔔 Next at " + reminderTime) : "Crushed today · Rest up and refuel";
+            views.setTextViewText(R.id.widget_standby_last_summary, sessionSummary);
 
-            // Tasteful secondary dark button
-            Bitmap startBtnBmp = createPillBitmap(context, parseColorSafe("#24262C", "#24262C"), 320, 42, 21f);
+            // Tasteful secondary button
+            Bitmap startBtnBmp = createPillBitmap(context, secondaryBg, 320, 42, 21f);
             if (startBtnBmp != null) {
                 views.setImageViewBitmap(R.id.widget_btn_start_bg, startBtnBmp);
             }
-            views.setTextColor(R.id.widget_btn_start_workout, Color.WHITE);
+            views.setTextColor(R.id.widget_btn_start_workout, secondaryText);
             views.setTextViewText(R.id.widget_btn_start_workout, "+  Start Another Workout");
         } else {
             // Case 2: No workout done yet today -> check weekly plan
@@ -627,8 +807,19 @@ public class WorkoutWidgetManager {
 
             if (scheduledRoutineName != null) {
                 // Today has a scheduled workout!
+                String greeting;
+                if (hour >= 5 && hour < 12) {
+                    greeting = "MORNING TARGET";
+                } else if (hour >= 12 && hour < 17) {
+                    greeting = "TODAY'S TARGET";
+                } else if (hour >= 17 && hour < 22) {
+                    greeting = "TONIGHT'S TARGET";
+                } else {
+                    greeting = "UP NEXT";
+                }
+                views.setTextViewText(R.id.widget_standby_eyebrow, greeting);
                 views.setTextViewText(R.id.widget_standby_badge, "TODAY'S PLAN");
-                views.setTextColor(R.id.widget_standby_badge, Color.WHITE);
+                views.setTextColor(R.id.widget_standby_badge, themeColor);
 
                 views.setTextViewText(R.id.widget_standby_title, scheduledRoutineName);
 
@@ -641,9 +832,19 @@ public class WorkoutWidgetManager {
                 views.setTextViewText(R.id.widget_standby_stat3_val, "~45m");
                 views.setTextViewText(R.id.widget_standby_stat3_lbl, "EST. TIME");
 
-                views.setTextViewText(R.id.widget_standby_last_summary, "Planned routine for today");
+                String planSummary = reminderOn ? ("🔔 Reminder set for " + reminderTime + " · Tap to start") : (scheduledExCount + " exercises ready · Tap Start to begin");
+                views.setTextViewText(R.id.widget_standby_last_summary, planSummary);
+
+                // Primary accent start button
+                Bitmap startBtnBmp = createPillBitmap(context, themeColor, 320, 42, 21f);
+                if (startBtnBmp != null) {
+                    views.setImageViewBitmap(R.id.widget_btn_start_bg, startBtnBmp);
+                }
+                views.setTextColor(R.id.widget_btn_start_workout, isColorLight(themeColor) ? Color.BLACK : Color.WHITE);
+                views.setTextViewText(R.id.widget_btn_start_workout, "▶  Start Workout");
             } else {
                 // Rest day
+                views.setTextViewText(R.id.widget_standby_eyebrow, "ACTIVE RECOVERY");
                 views.setTextViewText(R.id.widget_standby_badge, "REST DAY");
                 views.setTextColor(R.id.widget_standby_badge, parseColorSafe("#8E8E93", "#8E8E93"));
 
@@ -660,28 +861,48 @@ public class WorkoutWidgetManager {
                 views.setTextViewText(R.id.widget_standby_stat3_val, "Active");
                 views.setTextViewText(R.id.widget_standby_stat3_lbl, "RECOVERY");
 
-                String lastSummary = "Take a breather or do light cardio";
-                if (lastW != null) {
-                    String lastName = lastW.optString("name", "Workout");
-                    String lastDate = lastW.optString("d", "");
-                    lastSummary = "Last: " + lastName + (!lastDate.isEmpty() ? " · " + lastDate : "");
-                }
-                views.setTextViewText(R.id.widget_standby_last_summary, lastSummary);
-            }
+                String restSummary = reminderOn ? ("Muscles grow while resting · 🔔 Reminder " + reminderTime) : "Muscles grow while resting · Take a breather";
+                views.setTextViewText(R.id.widget_standby_last_summary, restSummary);
 
-            // Primary accent start button
-            Bitmap startBtnBmp = createPillBitmap(context, themeColor, 320, 42, 21f);
-            if (startBtnBmp != null) {
-                views.setImageViewBitmap(R.id.widget_btn_start_bg, startBtnBmp);
+                Bitmap startBtnBmp = createPillBitmap(context, secondaryBg, 320, 42, 21f);
+                if (startBtnBmp != null) {
+                    views.setImageViewBitmap(R.id.widget_btn_start_bg, startBtnBmp);
+                }
+                views.setTextColor(R.id.widget_btn_start_workout, secondaryText);
+                views.setTextViewText(R.id.widget_btn_start_workout, "+  Start Freestyle Workout");
             }
-            views.setTextColor(R.id.widget_btn_start_workout, Color.BLACK);
-            views.setTextViewText(R.id.widget_btn_start_workout, "▶  Start Workout");
         }
 
-        views.setOnClickPendingIntent(R.id.widget_btn_start_container, openAppPending);
-        views.setOnClickPendingIntent(R.id.widget_btn_start_workout, openAppPending);
-
         return views;
+    }
+
+    public static void scheduleMidnightReset(Context context) {
+        try {
+            AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (alarmManager == null) return;
+
+            Intent intent = new Intent(context, WorkoutWidgetProvider.class);
+            intent.setAction(ACTION_MIDNIGHT_RESET);
+            int flags = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    ? (PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)
+                    : PendingIntent.FLAG_UPDATE_CURRENT;
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 2001, intent, flags);
+
+            Calendar midnight = Calendar.getInstance();
+            midnight.set(Calendar.HOUR_OF_DAY, 0);
+            midnight.set(Calendar.MINUTE, 0);
+            midnight.set(Calendar.SECOND, 1);
+            midnight.set(Calendar.MILLISECOND, 0);
+            midnight.add(Calendar.DAY_OF_YEAR, 1);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, midnight.getTimeInMillis(), pendingIntent);
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, midnight.getTimeInMillis(), pendingIntent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error scheduling midnight reset", e);
+        }
     }
 
     public static void updateAllWidgets(Context context) {

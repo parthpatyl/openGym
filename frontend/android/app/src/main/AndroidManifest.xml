@@ -51,6 +51,11 @@
                 <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_LOG_SET" />
                 <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REST_PLUS_15" />
                 <action android:name="ch.duartesantos.opengym.WIDGET_ACTION_REST_SKIP" />
+                <action android:name="ch.duartesantos.opengym.WORKOUT_STATE_CHANGED" />
+                <action android:name="ch.duartesantos.opengym.ACTION_MIDNIGHT_RESET" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

@@ -122,6 +122,32 @@ export async function initMobileNotifications(store) {
           useStore.getState().replaceState(st, false)
         }
       })
+
+      const triggerAutoStart = async () => {
+        const { useStore } = await import('../store/useStore.js')
+        const { startFlow } = await import('../sheets.jsx')
+        const { nav } = await import('./nav.js')
+        const st = useStore.getState().S
+        if (st.active) {
+          nav('/workout')
+          return
+        }
+        const dayOfWeek = new Date().getDay()
+        const scheduledId = st.week ? st.week[dayOfWeek] : null
+        const routine = scheduledId ? (st.routines || []).find(r => r.id === scheduledId) : null
+        startFlow(routine ? routine.id : null)
+      }
+
+      WorkoutWidgetNative.addListener('onAutoStartWorkout', () => {
+        triggerAutoStart()
+      })
+
+      try {
+        const res = await WorkoutWidgetNative.checkPendingAutoStart()
+        if (res && res.autoStart) {
+          triggerAutoStart()
+        }
+      } catch (e) { /* ignore */ }
     }
   } catch (e) { /* ignore */ }
 }
