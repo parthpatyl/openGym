@@ -4,6 +4,7 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { useStore } from './useStore.js'
+import { scheduleRestNotification, addRestNotification, cancelRestNotification, initMobileNotifications } from '../lib/mobile.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
 // before the local timer completes. No-ops for guests / offline.
@@ -20,7 +21,7 @@ let workDone = null
 export const useUI = create((set, get) => ({
   sheets: [],          // { id, render:(close)=>JSX, kind:'sheet'|'center', locked }
   toastMsg: '',
-  timer: null,         // rest countdown between sets — { left, total, endsAt }
+  timer: null,         // rest countdown between sets — { left, total, endsAt, meta }
   work: null,          // work countdown DURING a timed set (issue #16) — { left, total, endsAt, label }
 
   openSheet(render, { kind = 'sheet', locked = false } = {}) {
@@ -38,11 +39,13 @@ export const useUI = create((set, get) => ({
     toastTm = setTimeout(() => set({ toastMsg: '' }), 2200)
   },
 
-  startRest(sec) {
+  startRest(sec, meta = {}) {
     get().stopRest()
     const endsAt = Date.now() + sec * 1000
-    set({ timer: { left: sec, total: sec, endsAt } })
+    set({ timer: { left: sec, total: sec, endsAt, meta } })
     pushRestTimer(sec)
+    const accentKey = useStore.getState().S?.accent || 'lime'
+    scheduleRestNotification(sec, { ...meta, accent: accentKey })
     timerTick = () => {
       const tm = get().timer
       if (!tm) return
@@ -68,11 +71,13 @@ export const useUI = create((set, get) => ({
     if (left <= 0) { get().stopRest(); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
+    addRestNotification(sec)
   },
   stopRest() {
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
+    cancelRestNotification()
     set({ timer: null })
   },
 
@@ -129,3 +134,17 @@ export const useUI = create((set, get) => ({
     set({ work: null })
   }
 }))
+
+// Connect action button events from native notifications or service worker
+initMobileNotifications(useUI)
+
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type === 'REST_ACTION') {
+      const act = event.data.action
+      if (act === 'skip') useUI.getState().stopRest()
+      else if (act === 'plus15') useUI.getState().addRest(15)
+      else if (act === 'minus15') useUI.getState().addRest(-15)
+    }
+  })
+}

@@ -10,17 +10,28 @@ self.addEventListener('activate', e => {
 })
 self.addEventListener('push', e => {
   const data = e.data ? e.data.json() : {}
+  const isRest = data.tag === 'rest-timer'
   e.waitUntil(self.registration.showNotification(data.title || 'openGym', {
     body: data.body || '',
     icon: 'icon-512.png',
     badge: 'icon-180.png',
     tag: data.tag || 'opengym',
-    renotify: true
+    renotify: true,
+    actions: isRest ? [
+      { action: 'minus15', title: '- 15s' },
+      { action: 'plus15', title: '+ 15s' },
+      { action: 'skip', title: 'Skip' }
+    ] : []
   }))
 })
 self.addEventListener('notificationclick', e => {
   e.notification.close()
-  e.waitUntil(self.clients.matchAll({ type: 'window' }).then(clients => {
+  const action = e.action
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+    if (action && ['skip', 'plus15', 'minus15'].includes(action)) {
+      clients.forEach(c => c.postMessage({ type: 'REST_ACTION', action }))
+      return
+    }
     const c = clients.find(c => 'focus' in c)
     return c ? c.focus() : self.clients.openWindow('./')
   }))

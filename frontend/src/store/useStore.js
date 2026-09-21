@@ -35,17 +35,24 @@ export const useStore = create((set, get) => {
 
   // Mobile build: mirror the state into a file in the app's data directory (survives WebView
   // storage eviction) and keep the native reminder schedule in step with the weekly plan.
-  const nativePersist = () => {
+  const nativePersist = immediate => {
     clearTimeout(saveTm)
-    saveTm = setTimeout(() => { saveTm = null; nativeSave(get().S); syncReminder(get().S) }, 800)
+    nativeSave(get().S)
+    if (immediate) {
+      saveTm = null
+      syncReminder(get().S)
+    } else {
+      saveTm = setTimeout(() => { saveTm = null; syncReminder(get().S) }, 800)
+    }
   }
 
   const persist = (S, push = true) => {
+    const activeChanged = (!!S.active !== !!get().S?.active) || (S.active?.cur !== get().S?.active?.cur)
     S._ts = Date.now()
     registerCustom(S.customEx)
     localStorage.setItem(KEY, JSON.stringify(S))
     set({ S })
-    if (MOBILE) nativePersist()
+    if (MOBILE) nativePersist(activeChanged)
     if (push && get().user) {
       clearTimeout(pushTm)
       pushTm = setTimeout(() => get().pushState(), 1500)
@@ -151,8 +158,7 @@ export const useStore = create((set, get) => {
       // localStorage may have been evicted since the last run) and go straight in.
       if (MOBILE) {
         const saved = await nativeLoad()
-        const S = get().S
-        if (saved && (!hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
+        if (saved && (hasData(saved) || !hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
           persist(Object.assign(clone(DEF), saved), false)
         } else if (hasData(S)) {
           nativeSave(S)   // first run after an update from a file-less version: seed the mirror

@@ -1,12 +1,13 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { bindUI } from './components/ui.jsx'
 import { ACCENTS } from './lib/format.js'
-import { setLang, useLang } from './lib/i18n.js'
+import { setLang, useLang, t } from './lib/i18n.js'
 import { setNav } from './lib/nav.js'
 import { useWakeLock } from './lib/wakelock.js'
+import { MOBILE } from './lib/mobile.js'
 import { startFlow } from './sheets.jsx'
 import Icon from './components/Icon.jsx'
 import TabBar from './components/TabBar.jsx'
@@ -49,6 +50,101 @@ function Shell() {
   useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
   // bound to the workout, not to the route — checking Stats mid-session keeps the screen on
   useWakeLock(!!S.active && S.keepAwake !== false)
+
+  const locRef = useRef(loc)
+  useEffect(() => { locRef.current = loc }, [loc])
+
+  // Android hardware back button handling with proper reverse UX
+  useEffect(() => {
+    if (!MOBILE) return
+    let lastBackPress = 0
+    let handle = null
+
+    const initBack = async () => {
+      try {
+        const { App } = await import('@capacitor/app')
+        handle = await App.addListener('backButton', () => {
+          const ui = useUI.getState()
+          // 1. If any sheet/modal is open, dismiss top sheet
+          if (ui.sheets && ui.sheets.length > 0) {
+            const topSheet = ui.sheets[ui.sheets.length - 1]
+            if (!topSheet.locked) {
+              ui.closeSheet(topSheet.id)
+              return
+            }
+          }
+
+          const currentPath = locRef.current?.pathname || window.location.hash.replace('#', '')
+          // 2. If inside a subpage or routine edit, reverse navigate
+          if (currentPath !== '/home' && currentPath !== '/' && currentPath !== '') {
+            if (currentPath.startsWith('/plan/r/')) {
+              navigate('/plan')
+            } else if (currentPath === '/workout') {
+              navigate('/home')
+            } else {
+              navigate('/home')
+            }
+            return
+          }
+
+          // 3. On root /home: Confirm double tap to exit app
+          const now = Date.now()
+          if (now - lastBackPress < 2000) {
+            App.exitApp()
+          } else {
+            lastBackPress = now
+            ui.toast(t('Press back again to exit'))
+          }
+        })
+      } catch (e) {}
+    }
+    initBack()
+
+    return () => {
+      if (handle && typeof handle.remove === 'function') handle.remove()
+    }
+  }, [navigate])
+
+  // Resume / foreground sync: reload state when app returns from background (e.g. after widget interactions)
+  useEffect(() => {
+    if (!MOBILE) return
+    let appHandle = null
+
+    const syncFromDisk = async () => {
+      try {
+        const { nativeLoad } = await import('./lib/mobile.js')
+        const saved = await nativeLoad()
+        if (saved) {
+          const curr = useStore.getState().S
+          if ((saved._ts || 0) > (curr?._ts || 0) || JSON.stringify(saved.active) !== JSON.stringify(curr?.active)) {
+            useStore.getState().replaceState(saved, false)
+          }
+        }
+      } catch (e) {}
+    }
+
+    const initAppListener = async () => {
+      try {
+        const { App } = await import('@capacitor/app')
+        appHandle = await App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) syncFromDisk()
+        })
+      } catch (e) {}
+    }
+    initAppListener()
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') syncFromDisk()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onVis)
+
+    return () => {
+      if (appHandle && typeof appHandle.remove === 'function') appHandle.remove()
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onVis)
+    }
+  }, [])
 
   const authed = user || isGuest
   if (!ready && !authed) return (
