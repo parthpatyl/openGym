@@ -72,6 +72,13 @@ export default function Home() {
           : routine ? <span className="tag acc">{t('Start')}</span>
           : <Icon name="plus" className="chev" />}
       </div>
+      {!S.active && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+          <Button size="sm" variant="ghost" className="dim" icon="reset" onClick={() => nav('/workout')}>
+            {t('Choose a different workout')}
+          </Button>
+        </div>
+      )}
     </div>
 
     {!S.routines.length && !S.active && (

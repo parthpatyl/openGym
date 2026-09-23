@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { imgSrc, gifSrc } from '../lib/exercises.js'
+import { imgSrc, gifSrc, imgCdnSrc, gifCdnSrc } from '../lib/exercises.js'
 import { useStore } from '../store/useStore.js'
 import { t } from '../lib/i18n.js'
 import Icon from './Icon.jsx'
@@ -11,20 +11,41 @@ import Icon from './Icon.jsx'
 // future workouts (issue #12).
 export default function Media({ ex, id, compact, minimizable }) {
   const [playing, setPlaying] = useState(true)
+  const [failed, setFailed] = useState(false)
+  const [useCdnFallback, setUseCdnFallback] = useState(false)
   const gifSize = useStore(s => s.S.gifSize)
   const update = useStore(s => s.update)
-  if (!ex.gif) return null
+  if (!ex?.gif) return null
   const mini = minimizable && gifSize === 'mini'
   const toggleSize = e => { e.stopPropagation(); update(s => { s.gifSize = mini ? 'full' : 'mini' }) }
+
+  const normalSrc = playing ? gifSrc(ex) : imgSrc(ex)
+  const cdnSrc = playing ? gifCdnSrc(ex) : imgCdnSrc(ex)
+  const currentSrc = useCdnFallback ? cdnSrc : normalSrc
+
+  const handleError = () => {
+    if (!useCdnFallback && normalSrc !== cdnSrc) {
+      setUseCdnFallback(true)
+    } else {
+      setFailed(true)
+    }
+  }
+
   return (
     <div className={'exmedia' + (compact ? ' compact' : '') + (mini ? ' mini' : '')} id={id} onClick={() => setPlaying(p => !p)}>
-      <img decoding="async" src={playing ? gifSrc(ex) : imgSrc(ex)} alt={ex.n} />
+      {!failed ? (
+        <img decoding="async" src={currentSrc} alt={ex.n} onError={handleError} />
+      ) : (
+        <div className="thumb thumb-x" style={{ width: '100%', height: '100%', minHeight: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="dumbbell" />
+        </div>
+      )}
       {minimizable && (
         <button className="giftoggle" onClick={toggleSize}>
           <Icon name={mini ? 'expand' : 'minimize'} />{mini ? t('Expand') : t('Minimize')}
         </button>
       )}
-      {!mini && (
+      {!mini && !failed && (
         <span className="gifhint">
           <Icon name={playing ? 'pause' : 'play'} />{playing ? t('tap to pause') : t('tap to play')}
         </span>
@@ -34,6 +55,21 @@ export default function Media({ ex, id, compact, minimizable }) {
 }
 
 export function Thumb({ ex }) {
-  if (!ex.img) return <div className="thumb thumb-x"><Icon name="dumbbell" /></div>
-  return <img className="thumb" loading="lazy" decoding="async" src={imgSrc(ex)} alt="" />
+  const [failed, setFailed] = useState(false)
+  const [useCdnFallback, setUseCdnFallback] = useState(false)
+  if (!ex?.img || failed) return <div className="thumb thumb-x"><Icon name="dumbbell" /></div>
+
+  const normal = imgSrc(ex)
+  const cdn = imgCdnSrc(ex)
+  const src = useCdnFallback ? cdn : normal
+
+  const handleError = () => {
+    if (!useCdnFallback && normal !== cdn) {
+      setUseCdnFallback(true)
+    } else {
+      setFailed(true)
+    }
+  }
+
+  return <img className="thumb" loading="lazy" decoding="async" src={src} alt="" onError={handleError} />
 }

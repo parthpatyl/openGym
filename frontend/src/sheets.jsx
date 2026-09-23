@@ -872,8 +872,23 @@ function TopWeight({ entryIdx, close }) {
     })
     close()
     if (advance && unitDone) {
-      if (isLastUnit) workoutCompleteSheet()               // whole workout done → finish/continue prompt
-      else update(s => { s.active.cur = units[unitIdx + 1][0] })
+      const allDone = S().active.entries.every(e => e.sets.length > 0 && e.sets.every(s => s.done))
+      if (allDone) {
+        workoutCompleteSheet()
+      } else if (isLastUnit) {
+        const pendingIdx = S().active.entries.findIndex(e => e.sets.some(s => !s.done))
+        if (pendingIdx !== -1) {
+          const pe = S().active.entries[pendingIdx]
+          const pendingCount = pe.sets.filter(s => !s.done).length
+          const peEx = EXIDX[pe.id] || (S().customEx || []).find(x => x.id === pe.id) || { n: pe.id }
+          update(s => { s.active.cur = pendingIdx })
+          toast(t('Heading back to {0} · {1} sets pending', peEx.n || pe.id, pendingCount))
+        } else {
+          workoutCompleteSheet()
+        }
+      } else {
+        update(s => { s.active.cur = units[unitIdx + 1][0] })
+      }
     } else toast(t('Tracked — next time starts at {0}', fmtNum(S().exWeights[entry.id].w) + ' ' + st.unit))
   }
   return <>
@@ -924,13 +939,68 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
     <Button variant="primary" onClick={() => { close(); nav('/home') }}>{t('Nice!')}</Button>
   </div>
 }
+function IncompleteWorkoutSheet({ close, onFinish }) {
+  const A = S().active
+  if (!A) return null
+  const pendingEntries = A.entries
+    .map((e, idx) => ({ entry: e, idx, pending: e.sets.filter(s => !s.done).length, total: e.sets.length }))
+    .filter(x => x.pending > 0)
+
+  const jumpTo = entryIdx => {
+    update(s => { s.active.cur = entryIdx })
+    close()
+  }
+
+  const exOr = id => EXIDX[id] || (S().customEx || []).find(x => x.id === id) || { n: id }
+
+  return <div style={{ padding: '4px 0' }}>
+    <div style={{ textAlign: 'center', marginBottom: 14 }}>
+      <div style={{ fontSize: 40, color: 'var(--orange)', display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+        <Icon name="clock" />
+      </div>
+      <h3 style={{ margin: 0, fontSize: 19 }}>{t('Incomplete Exercises')}</h3>
+      <div className="muted small" style={{ marginTop: 4 }}>
+        {t('Some exercises still have unchecked sets. Tap an exercise to complete it, or finish now.')}
+      </div>
+    </div>
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '42vh', overflowY: 'auto', marginBottom: 16 }}>
+      {pendingEntries.map(({ entry, idx, pending, total }) => {
+        const ex = exOr(entry.id)
+        return (
+          <div key={idx} className="card tappable" style={{ padding: 10, margin: 0, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+            onClick={() => jumpTo(idx)}>
+            <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Thumb ex={ex} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15, textTransform: 'capitalize', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {ex.n || entry.id}
+              </div>
+              <div className="small muted">
+                {ex.bp ? t(ex.bp) + ' · ' : ''}{t('{0} of {1} sets left', pending, total)}
+              </div>
+            </div>
+            <Button size="xs" variant="tinted" icon="chevronRight">{t('Resume')}</Button>
+          </div>
+        )
+      })}
+    </div>
+
+    <Button variant="primary" onClick={close}>{t('Continue workout')}</Button>
+    <div style={{ height: 8 }} />
+    <Button variant="ghost" style={{ color: 'var(--red)' }} onClick={() => { close(); onFinish() }}>{t('Finish workout anyway')}</Button>
+  </div>
+}
+export const incompleteWorkoutSheet = onFinish => ui().openSheet(close => <IncompleteWorkoutSheet close={close} onFinish={onFinish} />)
+
 export function finishWorkout() {
   const A = S().active
   if (!A) return
   const done = setsDoneActive(A)
   const total = A.entries.reduce((n, e) => n + e.sets.length, 0)
   if (!done) { confirmSheet({ title: t('Nothing logged yet'), message: t('You haven’t checked off any sets. Finish the workout anyway?'), confirmText: t('Finish anyway'), onConfirm: doFinishWorkout }); return }
-  if (done < total) { confirmSheet({ title: t('Finish early?'), message: t(total - done === 1 ? '{0} set still unchecked. Finish the workout now?' : '{0} sets still unchecked. Finish the workout now?', total - done), confirmText: t('Finish workout'), onConfirm: doFinishWorkout }); return }
+  if (done < total) { incompleteWorkoutSheet(doFinishWorkout); return }
   doFinishWorkout()
 }
 function doFinishWorkout() {

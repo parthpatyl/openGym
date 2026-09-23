@@ -380,33 +380,6 @@ public class WorkoutWidgetManager {
             int heightPx = Math.max(1, (int) (heightDp * density));
             float cornerRadiusPx = 22f * density;
 
-            // 1. Repeating SVG athletic diamond mesh tile (24dp x 24dp)
-            int tileDp = 24;
-            int tilePx = Math.max(8, (int) (tileDp * density));
-            Bitmap tileBmp = Bitmap.createBitmap(tilePx, tilePx, Bitmap.Config.ARGB_8888);
-            Canvas tileCanvas = new Canvas(tileBmp);
-
-            Paint patternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            patternPaint.setStyle(Paint.Style.STROKE);
-            patternPaint.setStrokeWidth(1f * density);
-            // 4% opacity: subtle texture that does not hurt readability
-            patternPaint.setColor(isLight ? Color.argb(12, 0, 0, 0) : Color.argb(14, 255, 255, 255));
-
-            float half = tilePx / 2f;
-            Path diamondPath = new Path();
-            diamondPath.moveTo(half, 0);
-            diamondPath.lineTo(tilePx, half);
-            diamondPath.lineTo(half, tilePx);
-            diamondPath.lineTo(0, half);
-            diamondPath.close();
-            tileCanvas.drawPath(diamondPath, patternPaint);
-
-            Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            dotPaint.setStyle(Paint.Style.FILL);
-            dotPaint.setColor(isLight ? Color.argb(10, 0, 0, 0) : Color.argb(12, 255, 255, 255));
-            tileCanvas.drawCircle(half, half, 1.2f * density, dotPaint);
-
-            // 2. Draw card background with tiled shader, border, and rounded corners
             Bitmap cardBmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888);
             Canvas cardCanvas = new Canvas(cardBmp);
 
@@ -414,22 +387,13 @@ public class WorkoutWidgetManager {
             Path clipPath = new Path();
             clipPath.addRoundRect(cardRect, cornerRadiusPx, cornerRadiusPx, Path.Direction.CW);
 
-            // Base fill
+            // Clean Solid Base fill (light/dark mode)
             Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             bgPaint.setColor(isLight ? Color.parseColor("#FFFFFF") : Color.parseColor("#121316"));
             bgPaint.setStyle(Paint.Style.FILL);
             cardCanvas.drawPath(clipPath, bgPaint);
 
-            // Repeating Pattern fill (clipped to rounded card)
-            cardCanvas.save();
-            cardCanvas.clipPath(clipPath);
-            Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            BitmapShader shader = new BitmapShader(tileBmp, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
-            shaderPaint.setShader(shader);
-            cardCanvas.drawRect(cardRect, shaderPaint);
-            cardCanvas.restore();
-
-            // Border stroke
+            // Subtle border stroke
             Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             borderPaint.setStyle(Paint.Style.STROKE);
             borderPaint.setStrokeWidth(1.2f * density);
@@ -606,6 +570,7 @@ public class WorkoutWidgetManager {
             views.setViewVisibility(R.id.widget_layout_standby, View.GONE);
 
             views.setTextColor(R.id.widget_active_eyebrow, textSecondary);
+            views.setInt(R.id.widget_active_gym_icon, "setColorFilter", textSecondary);
             views.setTextViewText(R.id.widget_active_exercise, info.exerciseName);
             views.setTextColor(R.id.widget_active_exercise, textPrimary);
             views.setTextViewText(R.id.widget_active_set_badge, "EX " + (info.entryIndex + 1) + "/" + info.totalEntries + " · SET " + (info.setIndex + 1) + "/" + info.totalSetsInEntry);
@@ -718,6 +683,7 @@ public class WorkoutWidgetManager {
 
         // Apply theme colors to stat texts
         views.setTextColor(R.id.widget_standby_eyebrow, textSecondary);
+        views.setInt(R.id.widget_standby_gym_icon, "setColorFilter", textSecondary);
         views.setTextColor(R.id.widget_standby_title, textPrimary);
         views.setTextColor(R.id.widget_standby_stat1_val, textPrimary);
         views.setTextColor(R.id.widget_standby_stat1_lbl, textSecondary);
@@ -756,7 +722,10 @@ public class WorkoutWidgetManager {
             double vol = todayW.optDouble("vol", 0.0);
             long startMs = todayW.optLong("start", 0);
             long endMs = todayW.optLong("end", 0);
-            long durMin = (startMs > 0 && endMs > startMs) ? (endMs - startMs) / 60000 : 0;
+            long durSec = (startMs > 0 && endMs > startMs) ? (endMs - startMs) / 1000 : 0;
+            long hours = durSec / 3600;
+            long mins = (durSec % 3600) / 60;
+            String durStr = String.format(Locale.getDefault(), "%02d:%02d", hours, mins);
             String unit = state != null ? state.optString("unit", "lb") : "lb";
 
             views.setTextViewText(R.id.widget_standby_stat1_val, String.valueOf(completedSets));
@@ -765,7 +734,7 @@ public class WorkoutWidgetManager {
             views.setTextViewText(R.id.widget_standby_stat2_val, String.format(Locale.getDefault(), "%,d", Math.round(vol)));
             views.setTextViewText(R.id.widget_standby_stat2_lbl, "VOL (" + unit.toUpperCase(Locale.getDefault()) + ")");
 
-            views.setTextViewText(R.id.widget_standby_stat3_val, durMin > 0 ? (durMin + "m") : "—");
+            views.setTextViewText(R.id.widget_standby_stat3_val, durSec > 0 ? durStr : "00:00");
             views.setTextViewText(R.id.widget_standby_stat3_lbl, "DURATION");
 
             String sessionSummary = reminderOn ? ("Crushed today · 🔔 Next at " + reminderTime) : "Crushed today · Rest up and refuel";

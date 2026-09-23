@@ -158,11 +158,16 @@ export const useStore = create((set, get) => {
       // Mobile build: no backend either — restore from the file mirror (the durable copy;
       // localStorage may have been evicted since the last run) and go straight in.
       if (MOBILE) {
-        const saved = await nativeLoad()
-        if (saved && (hasData(saved) || !hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
-          persist(Object.assign(clone(DEF), saved), false)
-        } else if (hasData(S)) {
-          nativeSave(S)   // first run after an update from a file-less version: seed the mirror
+        try {
+          const S = get().S
+          const saved = await nativeLoad()
+          if (saved && (hasData(saved) || !hasData(S) || (saved._ts || 0) >= (S._ts || 0))) {
+            persist(Object.assign(clone(DEF), saved), false)
+          } else if (hasData(S)) {
+            nativeSave(S)   // first run after an update from a file-less version: seed the mirror
+          }
+        } catch (e) {
+          // ignore error to ensure app boots into guest mode
         }
         get().setGuest(true)
         syncReminder(get().S)

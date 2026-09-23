@@ -27,12 +27,37 @@ export function registerCustom(list) {
 export const allExercises = st => [...(st.customEx || []), ...EXDB]
 
 // Media normally sits next to the app (img/ and gif/, mounted into the web container).
-// A build can point them somewhere else — the demo build pulls them off a CDN instead of
+// A build can point them somewhere else — the demo build and mobile build pull them off a CDN instead of
 // shipping ~140 MB of images into the deployment.
-const IMG_BASE = import.meta.env.VITE_IMG_BASE || 'img/'
-const GIF_BASE = import.meta.env.VITE_GIF_BASE || 'gif/'
-export const imgSrc = ex => IMG_BASE + ex.img
-export const gifSrc = ex => GIF_BASE + ex.gif
+export const CDN_IMG_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/images/'
+export const CDN_GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/'
+
+const isNativePlatform = () => typeof window !== 'undefined' && (
+  !!window.Capacitor?.isNativePlatform?.() ||
+  window.location?.protocol === 'capacitor:' ||
+  window.location?.protocol === 'ionic:'
+)
+
+export const getImgBase = () => {
+  if (import.meta.env.VITE_IMG_BASE) return import.meta.env.VITE_IMG_BASE
+  if (isNativePlatform() || import.meta.env.VITE_MOBILE === '1' || import.meta.env.VITE_DEMO === '1') {
+    return CDN_IMG_BASE
+  }
+  return 'img/'
+}
+
+export const getGifBase = () => {
+  if (import.meta.env.VITE_GIF_BASE) return import.meta.env.VITE_GIF_BASE
+  if (isNativePlatform() || import.meta.env.VITE_MOBILE === '1' || import.meta.env.VITE_DEMO === '1') {
+    return CDN_GIF_BASE
+  }
+  return 'gif/'
+}
+
+export const imgSrc = ex => (ex?.img ? getImgBase() + ex.img : '')
+export const gifSrc = ex => (ex?.gif ? getGifBase() + ex.gif : '')
+export const imgCdnSrc = ex => (ex?.img ? CDN_IMG_BASE + ex.img : '')
+export const gifCdnSrc = ex => (ex?.gif ? CDN_GIF_BASE + ex.gif : '')
 
 // Cardio exercises log time + speed instead of weight × reps.
 export const isCardio = idOrEx => (typeof idOrEx === 'string' ? EXIDX[idOrEx] : idOrEx)?.bp === 'cardio'

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
 import { exOr } from '../lib/exercises.js'
-import { effectiveRoutine, lastEntryFor, bestWeightFor, buildSets, setsDoneActive, supersetUnits, unitOf, setLabel, modeOf, isBw, isPerSide, sideReps, repStep, EFFORT, effortOf, stepEffort, capEffort } from '../lib/history.js'
+import { effectiveRoutine, lastEntryFor, bestWeightFor, buildSets, setsDoneActive, supersetUnits, unitOf, setLabel, modeOf, isBw, isPerSide, sideReps, repStep, EFFORT, effortOf, stepEffort, capEffort, defaultConfig } from '../lib/history.js'
 import { fmtNum, fmtDate, todayISO, exCount, DAYN } from '../lib/format.js'
 import { beep, vibrate } from '../lib/sound.js'
 import { t } from '../lib/i18n.js'
@@ -199,7 +199,7 @@ function ActiveWorkout() {
     const m = modeAt(idx)
     const cardioEntry = m === 'cardio'
     const isLastUnit = unitIdx >= units.length - 1
-    let askTop = false, exJustDone = false, workoutDone = false
+    let askTop = false, exJustDone = false, workoutDone = false, loopToPending = null
     mutEntry(idx, e => {
       e.sets[i].done = !e.sets[i].done
       if (e.sets[i].done) {
@@ -211,7 +211,15 @@ function ActiveWorkout() {
           startRest(S.restSec, { exercise: exName, set: i + 2, totalSets: e.sets.length })
         }
         else if (unitDone) stopRest()
-        if (unitDone && isLastUnit) workoutDone = true      // last exercise's last set → done
+
+        const allDone = A.entries.every(ent => (ent === e ? e : ent).sets.every(x => x.done))
+        if (allDone) {
+          workoutDone = true
+        } else if (unitDone && isLastUnit) {
+          const pIdx = A.entries.findIndex(ent => (ent === e ? e : ent).sets.some(x => !x.done))
+          if (pIdx !== -1) loopToPending = pIdx
+        }
+
         // Only loaded reps training has a "working weight" worth confirming — a bodyweight
         // plank has nothing to put in that slider, and neither does a set of push-ups
         // (issue #32: the fewest taps that still record what happened).
@@ -223,6 +231,13 @@ function ActiveWorkout() {
     // cardio/timed or already-confirmed: go straight to the prompt.
     if (askTop) topWeightSheet(idx)
     else if (workoutDone) workoutCompleteSheet()
+    else if (loopToPending !== null) {
+      const pe = A.entries[loopToPending]
+      const peEx = exOr(pe.id)
+      const pCount = pe.sets.filter(s => !s.done).length
+      update(s => { s.active.cur = loopToPending })
+      useUI.getState().toast(t('Heading back to {0} · {1} sets pending', peEx.n || pe.id, pCount))
+    }
     else if (exJustDone && cardioEntry) useUI.getState().toast(t('Cardio logged'))
     else if (exJustDone && m === 'time') useUI.getState().toast(t('Hold logged'))
   }
@@ -253,6 +268,72 @@ function ActiveWorkout() {
       api('/api/activity', { method: 'POST', body: JSON.stringify({ active: false }) }).catch(() => {})
     }
   }, [])
+
+  const moveCurrentUnit = dir => {
+    update(s => {
+      const act = s.active
+      if (!act) return
+      const currentUnits = supersetUnits(act.entries)
+      const uIdx = currentUnits.findIndex(u => u.includes(act.cur))
+      const targetIdx = uIdx + dir
+      if (uIdx < 0 || targetIdx < 0 || targetIdx >= currentUnits.length) return
+      const unitA = currentUnits[uIdx].map(x => act.entries[x])
+      const unitB = currentUnits[targetIdx].map(x => act.entries[x])
+      const newEntries = []
+      for (let k = 0; k < currentUnits.length; k++) {
+        if (k === Math.min(uIdx, targetIdx)) {
+          const first = dir > 0 ? unitB : unitA
+          const second = dir > 0 ? unitA : unitB
+          newEntries.push(...first, ...second)
+        } else if (k === Math.max(uIdx, targetIdx)) {
+          // already inserted
+        } else {
+          newEntries.push(...currentUnits[k].map(x => act.entries[x]))
+        }
+      }
+      act.entries = newEntries
+      const newUnits = supersetUnits(act.entries)
+      act.cur = newUnits[targetIdx][0]
+    })
+  }
+
+  const swapExercise = () => {
+    exercisePicker(newEx => {
+      update(s => {
+        const entry = s.active.entries[cur]
+        if (!entry) return
+        entry.id = newEx.id
+        entry.name = newEx.n
+        entry.target = { ...defaultConfig(newEx.id), ...(entry.target || {}) }
+        const m = modeOf({ ...entry.target, id: newEx.id })
+        entry.sets.forEach(st => {
+          if (m === 'cardio' && !st.min) { st.min = 20; st.speed = 8; delete st.r; delete st.w; delete st.sec }
+          else if (m === 'time' && !st.sec) { st.sec = 45; delete st.min; delete st.speed; delete st.r }
+          else if (m === 'reps' && !st.r) { st.r = 10; delete st.min; delete st.speed; delete st.sec }
+        })
+      })
+      useUI.getState().toast(t('Swapped to {0}', newEx.n))
+    })
+  }
+
+  const removeExercise = () => {
+    const entry = A.entries[cur]
+    if (!entry) return
+    const exName = exOr(entry.id)?.n || entry.name || t('this exercise')
+    confirmSheet({
+      title: t('Remove exercise?'),
+      message: t('Remove {0} from this workout session?', exName),
+      confirmText: t('Remove'),
+      danger: true,
+      onConfirm: () => {
+        update(s => {
+          s.active.entries.splice(cur, 1)
+          s.active.cur = Math.max(0, Math.min(cur, s.active.entries.length - 1))
+        })
+        useUI.getState().toast(t('{0} removed', exName))
+      }
+    })
+  }
 
   return <div className="narrow">
     <div className="hdr">
@@ -290,6 +371,23 @@ function ActiveWorkout() {
       s.active.entries.push({ id: ex.id, name: ex.n, target: { ...cfg }, plan, sets: applyPrescription(buildSets(s, full), plan) })
       s.active.cur = s.active.entries.length - 1
     }), null, S.routines.find(r => r.id === A.routineId)))} icon="plus">{t('Add exercise')}</Button>
+    {A.entries.length > 0 && <>
+      <div style={{ height: 6 }} />
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+        <Button size="sm" icon="chevronUp" aria-label={t('Move up')}
+          disabled={unitIdx <= 0} onClick={() => moveCurrentUnit(-1)}>{t('Move up')}</Button>
+        <Button size="sm" trailingIcon="chevronDown" aria-label={t('Move down')}
+          disabled={unitIdx < 0 || unitIdx >= units.length - 1} onClick={() => moveCurrentUnit(1)}>{t('Move down')}</Button>
+      </div>
+      <div style={{ height: 6 }} />
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Button size="sm" icon="shuffle" aria-label={t('Swap exercise')} onClick={swapExercise}>{t('Swap exercise')}</Button>
+      </div>
+      <div style={{ height: 6 }} />
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Button size="sm" icon="minus" style={{ color: 'var(--red)' }} onClick={removeExercise}>{t('Remove exercise')}</Button>
+      </div>
+    </>}
     <div style={{ height: 10 }} />
     {(() => {
       const exDone = A.entries.filter(e => e.sets.length && e.sets.every(s => s.done)).length
