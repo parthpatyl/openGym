@@ -127,7 +127,41 @@ export function getMuscleRecoveryPhase(elapsedHours, workoutIntensity = 1.0) {
 - **Proportional Scale Clamp for Mobile**: Built a custom dynamic scaling engine that completely avoids internal layout squashing:
   $$\text{Scale Factor} = \min\left(1, \frac{\text{Viewport Width} - 32\text{px}}{\text{Mount Base Width}}\right)$$
   - Ensures simulators remain at their 1:1 desktop design (410px phone, 440px widget, 460px modal) on mobile viewports (<480px, 390px iPhone, 360px Android) while scaling down smoothly without column truncations or text clipping.
+- **Interactive "Hold-to-Rep" Mechanic**: Implemented an authentic continuous-press gesture simulation for logging exercise repetitions with real-time feedback and audio chimes.
 - **Web Audio API Chime Engine**: Custom procedural Web Audio chime synthesizer matching native Android tones without external audio file requests.
+
+---
+
+### 6. Tactile Haptic Feedback Engine (`haptic.js`)
+- **Physical Sensory Anchors**: Implemented multi-tier vibration feedback patterns across user interactions:
+  - `TAP_LIGHT` (10ms): Incremental weight/rep stepper adjustments.
+  - `SUCCESS_HEAVY` (45ms + 30ms pulse): Set completion and workout finalization.
+  - `ALARM_BURST` (200ms pattern): Rest timer expiration alerting athletes even in loud gym environments.
+- **Graceful Hardware Degradation**: Checks `navigator.vibrate` and Capacitor Haptics availability with silent fallbacks on unsupported environments.
+
+---
+
+### 7. Smart Routine Merge Algorithm (`routine-merge.js`)
+- **Conflict-Free Routine Ingestion**: Enables athletes to import shared routine JSON files from training partners without overwriting existing exercise definitions or resetting personal records.
+- **Idempotent Deduplication**: Matches exercise keys via canonical lowercase slug comparison and merges historical PRs using maximum-value retention (`Math.max(existingPR, importedPR)`).
+
+---
+
+### 8. 10-Language Global Localization (`src/locales/`)
+- **International Workout Terminology**: Native translation support across 10 global languages: English, Spanish, German, French, Hindi, Italian, Korean, Polish, Portuguese, Russian, and Simplified Chinese.
+- **Zero-Latency Dynamic Locale Switching**: Instant UI updates without requiring an application restart or network dictionary fetch.
+
+---
+
+### 9. Android Hardware Back-Button Reverse Navigation UX (`App.jsx`)
+- **System Back-Press Interception**: Overrode default Android hardware back button behavior using Capacitor's `App.addListener('backButton')`.
+- **Hierarchical Sheet Dismissal**: Dismisses active modals, exercise selectors, and bottom sheets sequentially rather than inadvertently terminating the workout or exiting to the launcher.
+
+---
+
+### 10. MediaStyle Lock-Screen Rest Notification (`RestTimerManager.java`)
+- **Android MediaStyle Integration**: Leveraged Android's native `NotificationCompat.MediaStyle` to display timer actions as persistent lock-screen media controls matching system media player ergonomics (as seen in Android 13/14 notification shades).
+- **In-Notification Circular Steppers**: Features custom circular `-15s` and `+15s` action buttons with a high-contrast pill `Skip` button, allowing one-thumb operation during intense lifting sets.
 
 ---
 
