@@ -364,6 +364,13 @@ code, pre, .ct, .tel-num, .tel-tag, .mini-val, .sha-hash-code, .fixed-pin-val, .
   .hero-split-grid {
     grid-template-columns: 1fr;
     gap: 40px;
+    justify-items: center;
+  }
+  .hero-stage-left {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin: 0 auto;
   }
   .hero-content-right {
     align-items: center;
@@ -610,6 +617,7 @@ code, pre, .ct, .tel-num, .tel-tag, .mini-val, .sha-hash-code, .fixed-pin-val, .
 .architectural-mount {
   position: relative;
   padding: 24px;
+  transform-origin: top center;
   background: var(--card2);
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-lg);
@@ -3712,6 +3720,10 @@ html, body {
   .architectural-mount {
     padding: 14px 10px !important;
     max-width: none !important;
+    transform-origin: top center !important;
+    flex-shrink: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
   /* Prevent any internal squashing: keep desktop dimensions for 1:1 fidelity */
   .app-phone-frame {
@@ -3755,7 +3767,7 @@ html, body {
   }
   .hero-stage-left .architectural-mount {
     width: 432px !important;
-    transform-origin: top left;
+    transform-origin: top center !important;
     transform: scale(0.85);
   }
   .widget-centered-stage {
@@ -3764,7 +3776,7 @@ html, body {
   }
   .widget-centered-stage .architectural-mount {
     width: 462px !important;
-    transform-origin: top left;
+    transform-origin: top center !important;
     transform: scale(0.80);
   }
   .modal-centered-stage {
@@ -3773,7 +3785,7 @@ html, body {
   }
   .modal-centered-stage .architectural-mount {
     width: 482px !important;
-    transform-origin: top left;
+    transform-origin: top center !important;
     transform: scale(0.76);
   }
 }

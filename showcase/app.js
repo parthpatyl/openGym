@@ -1063,7 +1063,8 @@
           mount.style.width = naturalW + 'px';
           mount.style.minWidth = naturalW + 'px';
           mount.style.maxWidth = naturalW + 'px';
-          mount.style.transformOrigin = 'top left';
+          mount.style.flexShrink = '0';
+          mount.style.transformOrigin = 'top center';
           mount.style.transform = `scale(${scale})`;
 
           stage.style.width = scaledW + 'px';
@@ -1071,6 +1072,9 @@
           stage.style.margin = '0 auto 36px auto';
           stage.style.position = 'relative';
           stage.style.overflow = 'visible';
+          stage.style.display = 'flex';
+          stage.style.justifyContent = 'center';
+          stage.style.alignItems = 'flex-start';
         });
       }
 
