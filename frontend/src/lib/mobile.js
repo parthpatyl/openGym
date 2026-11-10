@@ -17,6 +17,7 @@ export const MOBILE = import.meta.env.VITE_MOBILE === '1' || (typeof window !== 
 
 export const RestTimerNative = MOBILE ? registerPlugin('RestTimerNative') : null
 export const WorkoutWidgetNative = MOBILE ? registerPlugin('WorkoutWidgetNative') : null
+export const NativeStorageAccess = MOBILE ? registerPlugin('NativeStorageAccess') : null
 
 export function toTitleCase(str) {
   if (!str) return ''
@@ -106,11 +107,23 @@ export async function initMobileNotifications(store) {
     if (RestTimerNative) {
       RestTimerNative.addListener('onRestAction', ({ action }) => {
         if (action === 'skip' || action === 'completed') {
-          store.getState().stopRest()
-        } else if (action === 'plus15') {
-          store.getState().addRest(15)
-        } else if (action === 'minus15') {
-          store.getState().addRest(-15)
+          store.getState().stopRest(true)
+        } else if (action === 'plus_15' || action === 'plus15') {
+          store.getState().addRest(15, true)
+        } else if (action === 'minus_15' || action === 'minus15') {
+          store.getState().addRest(-15, true)
+        } else if (action === 'started') {
+          getNativeRestState().then(st => {
+            if (st) store.getState().syncRestFromNative(st)
+          })
+        }
+      })
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          getNativeRestState().then(st => {
+            if (st) store.getState().syncRestFromNative(st)
+          })
         }
       })
     }
@@ -150,6 +163,14 @@ export async function initMobileNotifications(store) {
       } catch (e) { /* ignore */ }
     }
   } catch (e) { /* ignore */ }
+}
+
+// Query native rest timer state (endsAt, remaining, running)
+export async function getNativeRestState() {
+  if (!MOBILE || !RestTimerNative) return null
+  try {
+    return await RestTimerNative.getRestState()
+  } catch (e) { return null }
 }
 
 // Scheduled ongoing rest timer notification widget
@@ -205,3 +226,46 @@ export async function shareExport(json, filename) {
   await Share.share({ title: filename, url: w.uri })
 }
 
+// Save file using Android's native file picker (Storage Access Framework)
+export async function saveBackupToFilePicker(json, filename) {
+  if (NativeStorageAccess?.saveFile) {
+    try {
+      const res = await NativeStorageAccess.saveFile({ title: filename, content: json })
+      saveAutoBackup(json)
+      return res
+    } catch (e) {
+      if (e?.message && (e.message.toLowerCase().includes('cancel') || e.message.toLowerCase().includes('cancelled'))) {
+        throw e
+      }
+      // On non-cancellation error, fall back to share sheet
+    }
+  }
+  return shareExport(json, filename)
+}
+
+// Open file using Android's native file picker
+export async function openBackupFromFilePicker() {
+  if (NativeStorageAccess?.openFile) {
+    try {
+      const res = await NativeStorageAccess.openFile()
+      return res?.content || null
+    } catch (e) {
+      if (e?.message && (e.message.toLowerCase().includes('cancel') || e.message.toLowerCase().includes('cancelled'))) {
+        return null
+      }
+      throw e
+    }
+  }
+  return null
+}
+
+// Automatically save a rolling backup to Documents/openGym
+export async function saveAutoBackup(json) {
+  if (NativeStorageAccess?.autoBackup) {
+    try {
+      await NativeStorageAccess.autoBackup({ content: json, filename: 'openGym-auto-backup.json' })
+    } catch (e) {
+      console.warn('Auto backup skipped:', e)
+    }
+  }
+}

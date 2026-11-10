@@ -1,5 +1,18 @@
 // Hindi UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'नीचे के {0} सेट्स में मान कॉपी किए गए',
+  'Strength curve': 'स्ट्रेंथ कर्व',
+  'sessions': 'सत्र',
+  'Hold to copy values to sets below': 'नीचे के सेट में कॉपी करने के लिए दबाए रखें',
+  'Personal Record!': 'व्यक्तिगत रिकॉर्ड!',
+  'Milestones & Personal Records!': 'उपलब्धियां और नए रिकॉर्ड!',
+  'NEW PR': 'नया रिकॉर्ड',
+  'Best 1RM': 'सर्वोत्तम 1RM',
+  'Muscle Recovery': 'मांसपेशी रिकवरी',
+  'Fully Recovered': 'पूरी तरह रिकवर',
+  '{0} recovering': '{0} रिकवर हो रहे हैं',
+  'All muscle groups are rested and primed for heavy work.': 'सभी मांसपेशियां आराम कर चुकी हैं और तैयार हैं।',
+
   'Confirm': 'पुष्टि करें',
   'Cancel': 'रद्द करें',
   'Delete': 'हटाएँ',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'नोट: इकाई बदलने से केवल लेबल बदलता है — दर्ज संख्याएँ परिवर्तित नहीं होतीं।',
   'Data': 'डेटा',
   'Export backup (JSON)': 'बैकअप निर्यात करें (JSON)',
+  'Share backup': 'बैकअप साझा करें',
   'Import backup': 'बैकअप आयात करें',
   'Reset everything?': 'सब कुछ रीसेट करें?',
   'Reset everything': 'सब कुछ रीसेट करें',

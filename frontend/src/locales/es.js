@@ -1,5 +1,18 @@
 // Spanish UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'Valores copiados a {0} series siguientes',
+  'Strength curve': 'Curva de fuerza',
+  'sessions': 'sesiones',
+  'Hold to copy values to sets below': 'Mantén presionado para copiar a series siguientes',
+  'Personal Record!': '¡Récord personal!',
+  'Milestones & Personal Records!': '¡Hitos y récords personales!',
+  'NEW PR': 'NUEVO RÉCORD',
+  'Best 1RM': 'Mejor 1RM',
+  'Muscle Recovery': 'Recuperación muscular',
+  'Fully Recovered': 'Totalmente recuperado',
+  '{0} recovering': '{0} recuperándose',
+  'All muscle groups are rested and primed for heavy work.': 'Todos los grupos musculares están descansados y listos.',
+
   'Confirm': 'Confirmar',
   'Cancel': 'Cancelar',
   'Delete': 'Eliminar',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'Nota: cambiar la unidad solo cambia la etiqueta — los números registrados no se convierten.',
   'Data': 'Datos',
   'Export backup (JSON)': 'Exportar copia (JSON)',
+  'Share backup': 'Compartir copia',
   'Import backup': 'Importar copia',
   'Reset everything?': '¿Restablecer todo?',
   'Reset everything': 'Restablecer todo',

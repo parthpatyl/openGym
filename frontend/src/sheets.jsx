@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
-import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf } from './lib/exercises.js'
+import { EXDB, EXIDX, BODYPARTS, isCardio, isBodyweightEq, allExercises, equipmentOf, exOr } from './lib/exercises.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
-import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps } from './lib/history.js'
+import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf, isBw, isPerSide, sideReps, exLine } from './lib/history.js'
 import { beep, vibrate } from './lib/sound.js'
 import { t, instrFor, getLang, INSTR_LANGS } from './lib/i18n.js'
 import { nav } from './lib/nav.js'
@@ -11,7 +11,8 @@ import { starterRoutines } from './lib/starter.js'
 import Media, { Thumb } from './components/Media.jsx'
 import Stepper from './components/Stepper.jsx'
 import Icon from './components/Icon.jsx'
-import { Button, Slider, Switch, Segmented, SelectRow, Row } from './components/ui.jsx'
+import { Button, Slider, Switch, Segmented, SelectRow, Row, Check } from './components/ui.jsx'
+import { groupExercisesByMuscle, suggestMergedName, mergeRoutines, cloneSelectedExercises, primaryMuscleOf } from './lib/routine-merge.js'
 import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
@@ -19,7 +20,7 @@ import { parseImport, mergeImport } from './lib/import-csv.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression.js'
-import { MOBILE, shareExport } from './lib/mobile.js'
+import { MOBILE, shareExport, saveAutoBackup } from './lib/mobile.js'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -702,6 +703,384 @@ function PlanImport({ bundle, close }) {
   </>
 }
 
+/* ============================ merge splits (Interactive Merge Assistant) ============================ */
+function MergeSplitsSheet({ initialRoutineId, close }) {
+  const st = useStore(s => s.S)
+  const routines = st.routines || []
+
+  const [step, setStep] = useState(1) // 1: Select Splits, 2: Choose Muscles, 3: Preview & Confirm
+
+  const [routineAId, setRoutineAId] = useState(() => {
+    if (initialRoutineId && routines.some(r => r.id === initialRoutineId)) return initialRoutineId
+    return routines[0]?.id || ''
+  })
+  const [routineBId, setRoutineBId] = useState(() => {
+    const initA = (initialRoutineId && routines.some(r => r.id === initialRoutineId)) ? initialRoutineId : (routines[0]?.id || '')
+    const other = routines.find(r => r.id !== initA)
+    return other?.id || routines[1]?.id || routines[0]?.id || ''
+  })
+
+  const routineA = routines.find(r => r.id === routineAId)
+  const routineB = routines.find(r => r.id === routineBId)
+
+  // Selected muscle slugs for each split
+  const [selectedMusclesA, setSelectedMusclesA] = useState(() => new Set())
+  const [selectedMusclesB, setSelectedMusclesB] = useState(() => new Set())
+
+  const [customName, setCustomName] = useState('')
+  const [emoji, setEmoji] = useState(DEFAULT_GLYPH)
+  const [targetMode, setTargetMode] = useState('new')
+
+  useEffect(() => {
+    setSelectedMusclesA(new Set())
+  }, [routineAId])
+
+  useEffect(() => {
+    setSelectedMusclesB(new Set())
+  }, [routineBId])
+
+  const groupsA = groupExercisesByMuscle(routineA)
+  const groupsB = groupExercisesByMuscle(routineB)
+
+  // Compute selected indices in strict source order
+  const indicesA = []
+  if (routineA) {
+    routineA.ex.forEach((item, idx) => {
+      const { slug } = primaryMuscleOf(item.id)
+      if (selectedMusclesA.has(slug)) indicesA.push(idx)
+    })
+  }
+
+  const indicesB = []
+  if (routineB) {
+    routineB.ex.forEach((item, idx) => {
+      const { slug } = primaryMuscleOf(item.id)
+      if (selectedMusclesB.has(slug)) indicesB.push(idx)
+    })
+  }
+
+  const totalCount = indicesA.length + indicesB.length
+  const suggested = suggestMergedName(routineA, indicesA, routineB, indicesB)
+  const displayName = customName.trim() || suggested
+
+  const toggleMuscleA = slug => {
+    setSelectedMusclesA(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+  }
+
+  const toggleMuscleB = slug => {
+    setSelectedMusclesB(prev => {
+      const next = new Set(prev)
+      if (next.has(slug)) next.delete(slug)
+      else next.add(slug)
+      return next
+    })
+  }
+
+  const pickRoutine = which => {
+    const isA = which === 'A'
+    const currentId = isA ? routineAId : routineBId
+    ui().openSheet(c => (
+      <>
+        <h3>{isA ? t('Select Split 1') : t('Select Split 2')}</h3>
+        <div className="list">
+          {routines.map(r => (
+            <div
+              key={r.id}
+              className="item"
+              onClick={() => {
+                if (isA) {
+                  setRoutineAId(r.id)
+                  if (r.id === routineBId) {
+                    const nextB = routines.find(x => x.id !== r.id)
+                    if (nextB) setRoutineBId(nextB.id)
+                  }
+                } else {
+                  setRoutineBId(r.id)
+                  if (r.id === routineAId) {
+                    const nextA = routines.find(x => x.id !== r.id)
+                    if (nextA) setRoutineAId(nextA.id)
+                  }
+                }
+                c()
+              }}
+            >
+              <span className="lrow-i"><Icon name={glyphOf(r.emoji)} /></span>
+              <div className="grow">
+                <div className="tt">{r.name}</div>
+                <div className="ss">{exCount(r.ex.length)}</div>
+              </div>
+              {r.id === currentId && <Icon name="check" className="accent" />}
+            </div>
+          ))}
+        </div>
+      </>
+    ))
+  }
+
+  const doMerge = () => {
+    if (targetMode === 'appendA') {
+      if (indicesB.length === 0) {
+        toast(t('Please select at least one exercise to add'))
+        return
+      }
+      const clonedB = cloneSelectedExercises(routineB, indicesB)
+      update(s => {
+        const target = s.routines.find(r => r.id === routineAId)
+        if (target) {
+          target.ex.push(...clonedB)
+          cleanupSg(target.ex)
+        }
+      })
+      close()
+      toast(t('Added {0} exercises to {1}', clonedB.length, routineA.name))
+      nav('/plan/r/' + routineA.id)
+    } else {
+      if (totalCount === 0) {
+        toast(t('Please select at least one exercise to merge'))
+        return
+      }
+      const merged = mergeRoutines({
+        routineA,
+        selectedIndicesA: indicesA,
+        routineB,
+        selectedIndicesB: indicesB,
+        name: displayName,
+        emoji
+      })
+      update(s => {
+        s.routines.push(merged)
+      })
+      close()
+      toast(t('Split “{0}” created with {1} exercises', merged.name, merged.ex.length))
+      nav('/plan/r/' + merged.id)
+    }
+  }
+
+  return (
+    <>
+      {/* Step Indicator Header */}
+      <div className="row between" style={{ marginBottom: 4, alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>
+          {step === 1 && t('Step 1 of 3: Choose Splits')}
+          {step === 2 && t('Step 2 of 3: Target Muscles')}
+          {step === 3 && t('Step 3 of 3: Preview & Confirm')}
+        </h3>
+        <span className="tag acc">{t('Step {0}/3', step)}</span>
+      </div>
+
+      <div className="muted small" style={{ marginBottom: 16 }}>
+        {step === 1 && t('Pick two workout splits to combine.')}
+        {step === 2 && t('Tap a muscle to automatically extract all its matching exercises.')}
+        {step === 3 && t('Review your combined workout split in source order.')}
+      </div>
+
+      {/* ================= STEP 1: CHOOSE SOURCE SPLITS ================= */}
+      {step === 1 && (
+        <>
+          <div className="sect-b" style={{ marginBottom: 18 }}>
+            <Row
+              icon={glyphOf(routineA?.emoji)}
+              title={routineA ? routineA.name : t('Select Split 1')}
+              subtitle={t('Split 1 · {0}', exCount(routineA?.ex?.length || 0))}
+              accessory="chevron"
+              onClick={() => pickRoutine('A')}
+            />
+            <Row
+              icon={glyphOf(routineB?.emoji)}
+              title={routineB ? routineB.name : t('Select Split 2')}
+              subtitle={t('Split 2 · {0}', exCount(routineB?.ex?.length || 0))}
+              accessory="chevron"
+              onClick={() => pickRoutine('B')}
+            />
+          </div>
+
+          <Button
+            variant="primary"
+            trailingIcon="chevronRight"
+            disabled={!routineA || !routineB}
+            onClick={() => setStep(2)}
+          >
+            {t('Next: Target Muscles')}
+          </Button>
+          <div style={{ height: 8 }} />
+          <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
+        </>
+      )}
+
+      {/* ================= STEP 2: DETECT & CHOOSE TARGET MUSCLES ================= */}
+      {step === 2 && (
+        <>
+          {/* Split 1 Muscles */}
+          <div className="card" style={{ padding: '12px 14px', marginBottom: 14 }}>
+            <div className="row between" style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 600 }}>{routineA?.name}</div>
+              <div className="small dim">{indicesA.length} {t('exercises')}</div>
+            </div>
+            {groupsA.length === 0 ? (
+              <div className="small dim">{t('No exercises in this split')}</div>
+            ) : (
+              <div className="chips" style={{ margin: 0 }}>
+                {groupsA.map(g => {
+                  const sel = selectedMusclesA.has(g.slug)
+                  return (
+                    <button
+                      key={g.slug}
+                      className={'chip' + (sel ? ' on' : '')}
+                      onClick={() => toggleMuscleA(g.slug)}
+                    >
+                      {sel && <Icon name="check" style={{ fontSize: 13, marginRight: 4, display: 'inline-block' }} />}
+                      {t(g.name)} ({g.indices.length})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Split 2 Muscles */}
+          <div className="card" style={{ padding: '12px 14px', marginBottom: 16 }}>
+            <div className="row between" style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 600 }}>{routineB?.name}</div>
+              <div className="small dim">{indicesB.length} {t('exercises')}</div>
+            </div>
+            {groupsB.length === 0 ? (
+              <div className="small dim">{t('No exercises in this split')}</div>
+            ) : (
+              <div className="chips" style={{ margin: 0 }}>
+                {groupsB.map(g => {
+                  const sel = selectedMusclesB.has(g.slug)
+                  return (
+                    <button
+                      key={g.slug}
+                      className={'chip' + (sel ? ' on' : '')}
+                      onClick={() => toggleMuscleB(g.slug)}
+                    >
+                      {sel && <Icon name="check" style={{ fontSize: 13, marginRight: 4, display: 'inline-block' }} />}
+                      {t(g.name)} ({g.indices.length})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="small muted" style={{ textAlign: 'center', marginBottom: 14 }}>
+            {t('{0} exercises selected ({1} from {2}, {3} from {4})', totalCount, indicesA.length, routineA?.name || '1', indicesB.length, routineB?.name || '2')}
+          </div>
+
+          <Button
+            variant="primary"
+            trailingIcon="chevronRight"
+            disabled={totalCount === 0}
+            onClick={() => setStep(3)}
+          >
+            {t('Next: Preview & Confirm')}
+          </Button>
+          <div style={{ height: 8 }} />
+          <Button variant="ghost" className="dim" onClick={() => setStep(1)}>{t('Back')}</Button>
+        </>
+      )}
+
+      {/* ================= STEP 3: PREVIEW & CONFIRM ================= */}
+      {step === 3 && (
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <Segmented
+              className="seg-range"
+              value={targetMode}
+              onChange={setTargetMode}
+              options={[
+                { value: 'new', label: t('Create new split') },
+                { value: 'appendA', label: t('Append to {0}', routineA?.name || 'Split 1') }
+              ]}
+            />
+          </div>
+
+          {targetMode === 'new' && (
+            <div className="row" style={{ gap: 8, marginBottom: 14, alignItems: 'center' }}>
+              <button
+                className="iconbtn"
+                style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0 }}
+                aria-label={t('Pick an icon')}
+                onClick={() => glyphPicker(emoji, setEmoji)}
+              >
+                <Icon name={glyphOf(emoji)} />
+              </button>
+              <input
+                className="input"
+                style={{ flex: 1, fontWeight: 600, fontSize: 16 }}
+                value={customName || suggested}
+                placeholder={t('New split name')}
+                onChange={e => setCustomName(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Combined exercise preview in strict source order */}
+          <div className="list" style={{ maxHeight: '38vh', overflowY: 'auto', marginBottom: 16 }}>
+            {indicesA.map(idx => {
+              const item = routineA.ex[idx]
+              const ex = exOr(item.id)
+              const muscle = primaryMuscleOf(ex)
+              return (
+                <div key={'a-' + idx} className="item">
+                  <Thumb ex={ex} />
+                  <div className="grow">
+                    <div className="tt capitalize">{ex.n}</div>
+                    <div className="ss">{exLine(item, st.unit)}</div>
+                  </div>
+                  <span className="tag acc">{t(muscle.name)}</span>
+                </div>
+              )
+            })}
+            {indicesB.map(idx => {
+              const item = routineB.ex[idx]
+              const ex = exOr(item.id)
+              const muscle = primaryMuscleOf(ex)
+              return (
+                <div key={'b-' + idx} className="item">
+                  <Thumb ex={ex} />
+                  <div className="grow">
+                    <div className="tt capitalize">{ex.n}</div>
+                    <div className="ss">{exLine(item, st.unit)}</div>
+                  </div>
+                  <span className="tag acc">{t(muscle.name)}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          <Button
+            variant="primary"
+            icon="shuffle"
+            onClick={doMerge}
+          >
+            {targetMode === 'appendA'
+              ? t('Add {0} exercises to {1}', indicesB.length, routineA?.name || 'Split 1')
+              : t('Create “{0}” ({1})', displayName, exCount(totalCount))}
+          </Button>
+          <div style={{ height: 8 }} />
+          <Button variant="ghost" className="dim" onClick={() => setStep(2)}>{t('Back')}</Button>
+        </>
+      )}
+    </>
+  )
+}
+
+export const mergeSplitsSheet = initialRoutineId => {
+  const st = useStore.getState().S
+  if ((st.routines || []).length < 2) {
+    ui().toast(t('Create at least two routines to merge them'))
+    return
+  }
+  ui().openSheet(close => <MergeSplitsSheet initialRoutineId={initialRoutineId} close={close} />)
+}
+
 /* ============================ day override / assign ============================ */
 function DayOverride({ iso, close }) {
   const st = useStore(s => s.S)
@@ -918,8 +1297,57 @@ function WorkoutComplete({ close }) {
 }
 export const workoutCompleteSheet = () => ui().openSheet(close => <WorkoutComplete close={close} />, { kind: 'center' })
 
+function MergedRoutineActionSheet({ routine, close }) {
+  const doKeep = () => {
+    close()
+    nav('/home')
+  }
+  const doArchive = () => {
+    update(s => {
+      const r = s.routines.find(x => x.id === routine.id)
+      if (r) r.archived = true
+      Object.keys(s.week).forEach(k => { if (s.week[k] === routine.id) delete s.week[k] })
+      Object.keys(s.dayPlan).forEach(k => { if (s.dayPlan[k] === routine.id) delete s.dayPlan[k] })
+    })
+    toast(t('“{0}” archived', routine.name))
+    close()
+    nav('/home')
+  }
+  const doDelete = () => {
+    update(s => {
+      s.routines = s.routines.filter(x => x.id !== routine.id)
+      Object.keys(s.week).forEach(k => { if (s.week[k] === routine.id) delete s.week[k] })
+      Object.keys(s.dayPlan).forEach(k => { if (s.dayPlan[k] === routine.id) delete s.dayPlan[k] })
+    })
+    toast(t('“{0}” deleted', routine.name))
+    close()
+    nav('/home')
+  }
+  return <div style={{ textAlign: 'center', padding: '6px 0' }}>
+    <div style={{ fontSize: 38, display: 'flex', justifyContent: 'center', color: 'var(--yellow, #eab308)', marginBottom: 8 }}><Icon name="folder" /></div>
+    <h3 style={{ margin: '0 0 8px' }}>{t('One-off split cleanup')}</h3>
+    <div className="muted small" style={{ marginBottom: 18, lineHeight: 1.5 }}>
+      {t('You just finished a session from “{0}” (merged split). What would you like to do with this routine?', routine.name)}
+    </div>
+    <Button variant="primary" onClick={doKeep} style={{ width: '100%', marginBottom: 8 }}>{t('Keep in Plan')}</Button>
+    <div style={{ height: 6 }} />
+    <Button variant="tinted" icon="folder" onClick={doArchive} style={{ width: '100%', marginBottom: 8 }}>{t('Archive Split')}</Button>
+    <div style={{ height: 6 }} />
+    <Button variant="ghost" icon="trash" style={{ width: '100%', color: 'var(--red)' }} onClick={doDelete}>{t('Delete Split')}</Button>
+  </div>
+}
+
 function FinishSummary({ w, prs, e1prs = [], close }) {
   const st = useStore(s => s.S)
+  const routine = (st.routines || []).find(r => r.id === w.routineId)
+  const onDone = () => {
+    close()
+    if (routine?.merged) {
+      ui().openSheet(c => <MergedRoutineActionSheet routine={routine} close={c} />, { kind: 'center', locked: true })
+    } else {
+      nav('/home')
+    }
+  }
   return <div style={{ textAlign: 'center', padding: '8px 0' }}>
     <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="trophy" /></div>
     <h3 style={{ margin: '8px 0' }}>{t('Workout complete!')}</h3>
@@ -929,14 +1357,49 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
       <div className="tile"><div className="l">{t('Sets')}</div><div className="v" style={{ fontSize: '1.1rem' }}>{setsDone(w)}</div></div>
       <div className="tile"><div className="l">{t('PRs')}</div><div className="v" style={{ fontSize: 20 }}>{prs.length || '—'}</div></div>
     </div>
-    {(prs.length > 0 || e1prs.length > 0) && <div style={{ textAlign: 'left', marginBottom: 12 }}>
-      {prs.map(id => <div key={id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="trophy" style={{ fontSize: 13 }} />{t('New PR:')} {(EXIDX[id] || {}).n || id}</div>)}
-      {e1prs.map(p => <div key={p.id} className="small accent capitalize row" style={{ gap: 5 }}><Icon name="chartLine" style={{ fontSize: 13 }} />{t('Best estimated 1RM:')} {(EXIDX[p.id] || {}).n || p.id} · {fmtNum(p.est)} {st.unit}</div>)}
-    </div>}
+    {(prs.length > 0 || e1prs.length > 0) && (
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.16), rgba(245, 158, 11, 0.06))',
+        border: '1px solid rgba(234, 179, 8, 0.35)',
+        borderRadius: 12,
+        padding: '12px 14px',
+        marginBottom: 16,
+        textAlign: 'left'
+      }}>
+        <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 8, color: 'var(--yellow)', fontWeight: 700, fontSize: 14 }}>
+          <Icon name="trophy" size={16} />
+          <span>{t('Milestones & Personal Records!')}</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {prs.map(id => (
+            <div key={id} className="row between" style={{ fontSize: 13 }}>
+              <span className="row capitalize" style={{ gap: 6, fontWeight: 600, color: 'var(--yellow)' }}>
+                <Icon name="star" size={13} />
+                {(EXIDX[id] || {}).n || id}
+              </span>
+              <span className="tag" style={{ background: 'rgba(234, 179, 8, 0.25)', color: 'var(--yellow)', border: 'none', fontWeight: 700, fontSize: 10, padding: '2px 6px' }}>
+                {t('NEW PR')}
+              </span>
+            </div>
+          ))}
+          {e1prs.map(p => (
+            <div key={p.id} className="row between" style={{ fontSize: 12 }}>
+              <span className="row capitalize" style={{ gap: 6, color: 'var(--fg-dim)' }}>
+                <Icon name="chartLine" size={13} style={{ color: 'var(--acc)' }} />
+                {(EXIDX[p.id] || {}).n || p.id}
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--acc)' }}>
+                {fmtNum(p.est)} {st.unit} ({t('1RM')})
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     <h4 className="sec" style={{ textAlign: 'left' }}>{t('What you just trained')}</h4>
     <BodyMap load={loadOfWorkouts([w])} body={st.body} />
     <div style={{ height: 14 }} />
-    <Button variant="primary" onClick={() => { close(); nav('/home') }}>{t('Nice!')}</Button>
+    <Button variant="primary" onClick={onDone}>{t('Nice!')}</Button>
   </div>
 }
 function IncompleteWorkoutSheet({ close, onFinish }) {
@@ -1034,6 +1497,9 @@ function doFinishWorkout() {
     s.workouts.push(w)
     s.active = null
   })
+  if (MOBILE) {
+    saveAutoBackup(JSON.stringify(useStore.getState().S))
+  }
   useUI.getState().stopRest()
   beep(snd(), 880, 0.15); beep(snd(), 1100, 0.15, 0.18); beep(snd(), 1320, 0.3, 0.36)
   ui().openSheet(close => <FinishSummary w={w} prs={prs} e1prs={e1prs} close={close} />, { kind: 'center', locked: true })

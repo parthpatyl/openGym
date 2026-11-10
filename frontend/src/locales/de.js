@@ -1,5 +1,18 @@
 // German UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'Werte auf {0} darunterliegende Sätze kopiert',
+  'Strength curve': 'Kraftkurve',
+  'sessions': 'Einheiten',
+  'Hold to copy values to sets below': 'Gedrückt halten, um Werte nach unten zu kopieren',
+  'Personal Record!': 'Persönlicher Rekord!',
+  'Milestones & Personal Records!': 'Meilensteine & persönliche Rekorde!',
+  'NEW PR': 'NEUER REKORD',
+  'Best 1RM': 'Bestes 1RM',
+  'Muscle Recovery': 'Muskelerholung',
+  'Fully Recovered': 'Vollständig erholt',
+  '{0} recovering': '{0} in Erholung',
+  'All muscle groups are rested and primed for heavy work.': 'Alle Muskelgruppen sind erholt und bereit für schweres Training.',
+
   // --- generic ---
   'Confirm': 'Bestätigen',
   'Cancel': 'Abbrechen',
@@ -272,6 +285,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'Hinweis: Der Einheitenwechsel ändert nur die Beschriftung — eingetragene Zahlen werden nicht umgerechnet.',
   'Data': 'Daten',
   'Export backup (JSON)': 'Backup exportieren (JSON)',
+  'Share backup': 'Backup teilen',
   'Import backup': 'Backup importieren',
   'Reset everything?': 'Alles zurücksetzen?',
   'Reset everything': 'Alles zurücksetzen',

@@ -154,6 +154,10 @@ public class RestTimerManager {
         return accentColor;
     }
 
+    public synchronized long getEndsAtMs() {
+        return endsAtMs;
+    }
+
     private final Runnable tickRunnable = new Runnable() {
         @Override
         public void run() {

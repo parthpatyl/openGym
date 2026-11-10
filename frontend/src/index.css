@@ -629,6 +629,21 @@ h4.sec{
 #timer.rest .acts{display:flex;align-items:center;gap:8px}
 #timer.rest .acts .btn{padding-top:11px;padding-bottom:11px}   /* sweaty hands, mid-set */
 #timer.rest .acts .skip{margin-left:auto;min-width:84px}
+#timer.rest .ring-wrap{position:relative;width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center}
+#timer.rest .ring{width:40px;height:40px;transform:rotate(-90deg)}
+#timer.rest .ring-bg{fill:none;stroke:var(--surface-3);stroke-width:3}
+#timer.rest .ring-fg{fill:none;stroke:var(--acc);stroke-width:3;stroke-linecap:round;transition:stroke .3s ease}
+#timer.rest .ring-icon{position:absolute;display:flex;align-items:center;justify-content:center;color:var(--label-2);font-size:12px}
+#timer.rest .time-col{display:flex;flex-direction:column;gap:1px;min-width:64px}
+#timer.rest .time-col .t{min-width:auto;font-size:22px;line-height:1.1}
+#timer.rest .sub-lbl{font-size:10px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--label-2);transition:color .3s ease}
+#timer.rest.rest-warning .ring-fg{stroke:var(--yellow, #ff9f0a)}
+#timer.rest.rest-warning .sub-lbl{color:var(--yellow, #ff9f0a)}
+#timer.rest.rest-warning .ring-icon{color:var(--yellow, #ff9f0a)}
+#timer.rest.rest-urgent .ring-fg{stroke:var(--acc);filter:drop-shadow(0 0 6px var(--acc))}
+#timer.rest.rest-urgent .sub-lbl{color:var(--acc);animation:pulse-lbl .6s ease-in-out infinite alternate}
+#timer.rest.rest-urgent .ring-icon{color:var(--acc);animation:pulse-lbl .6s ease-in-out infinite alternate}
+@keyframes pulse-lbl{from{opacity:.6;transform:scale(0.95)}to{opacity:1;transform:scale(1.05)}}
 /* work timer (issue #16): the same bar doing the opposite job — outlined and tinted so a
    glance tells "you are holding this" apart from "you are recovering". */
 #timer.working{border:var(--hair) solid var(--acc)}
@@ -777,6 +792,9 @@ h4.sec{
 .bm-m.l2{fill:color-mix(in srgb,var(--acc) 56%,var(--bm-base))}
 .bm-m.l3{fill:color-mix(in srgb,var(--acc) 78%,var(--bm-base))}
 .bm-m.l4{fill:var(--acc)}
+.bm-m.rec-fatigued{fill:var(--red, #ff453a)}
+.bm-m.rec-recovering{fill:var(--yellow, #ffd60a)}
+.bm-m.rec-ready{fill:var(--acc, #30d158)}
 .bm-m.sel{stroke:var(--label);stroke-width:7}
 .bodymap.tappable .bm-m{cursor:pointer}
 /* A hairline in the surface colour separates neighbouring muscles; the artwork has no

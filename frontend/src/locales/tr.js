@@ -1,5 +1,18 @@
 // Turkish UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'Değerler aşağıdaki {0} sete kopyalandı',
+  'Strength curve': 'Güç eğrisi',
+  'sessions': 'antrenman',
+  'Hold to copy values to sets below': 'Aşağıdaki setlere kopyalamak için basılı tutun',
+  'Personal Record!': 'Kişisel Rekor!',
+  'Milestones & Personal Records!': 'Dönüm Noktaları ve Kişisel Rekorlar!',
+  'NEW PR': 'YENİ REKOR',
+  'Best 1RM': 'En iyi 1RM',
+  'Muscle Recovery': 'Kas İyileşmesi',
+  'Fully Recovered': 'Tamamen İyileşti',
+  '{0} recovering': '{0} iyileşiyor',
+  'All muscle groups are rested and primed for heavy work.': 'Tüm kas grupları dinlendi ve antrenmana hazır.',
+
   'Confirm': 'Onayla',
   'Cancel': 'İptal',
   'Delete': 'Sil',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'Not: birim değiştirmek sadece etiketi değiştirir — kayıtlı sayılar dönüştürülmez.',
   'Data': 'Veriler',
   'Export backup (JSON)': 'Yedeği dışa aktar (JSON)',
+  'Share backup': 'Yedeği paylaş',
   'Import backup': 'Yedeği içe aktar',
   'Reset everything?': 'Her şey sıfırlansın mı?',
   'Reset everything': 'Her şeyi sıfırla',

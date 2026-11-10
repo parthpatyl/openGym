@@ -1,5 +1,18 @@
 // Simplified Chinese UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': '已将数值复制到下方 {0} 组',
+  'Strength curve': '力量曲线',
+  'sessions': '次训练',
+  'Hold to copy values to sets below': '长按复制数值到下方所有组',
+  'Personal Record!': '个人纪录！',
+  'Milestones & Personal Records!': '里程碑与个人纪录！',
+  'NEW PR': '新纪录',
+  'Best 1RM': '最佳极限 1RM',
+  'Muscle Recovery': '肌肉恢复状态',
+  'Fully Recovered': '完全恢复',
+  '{0} recovering': '{0} 处正在恢复',
+  'All muscle groups are rested and primed for heavy work.': '所有肌肉群均已充分恢复，准备就绪。',
+
   'Confirm': '确认',
   'Cancel': '取消',
   'Delete': '删除',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': '注意：切换单位只改变标签——已记录的数字不会换算。',
   'Data': '数据',
   'Export backup (JSON)': '导出备份（JSON）',
+  'Share backup': '分享备份',
   'Import backup': '导入备份',
   'Reset everything?': '重置所有内容？',
   'Reset everything': '重置所有内容',

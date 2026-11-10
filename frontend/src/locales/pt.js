@@ -1,5 +1,18 @@
 // Portuguese UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'Valores copiados para {0} séries abaixo',
+  'Strength curve': 'Curva de força',
+  'sessions': 'sessões',
+  'Hold to copy values to sets below': 'Segure para copiar para as séries abaixo',
+  'Personal Record!': 'Recorde pessoal!',
+  'Milestones & Personal Records!': 'Marcos e recordes pessoais!',
+  'NEW PR': 'NOVO RECORDE',
+  'Best 1RM': 'Melhor 1RM',
+  'Muscle Recovery': 'Recuperação muscular',
+  'Fully Recovered': 'Totalmente recuperado',
+  '{0} recovering': '{0} em recuperação',
+  'All muscle groups are rested and primed for heavy work.': 'Todos os grupos musculares estão recuperados e prontos.',
+
   'Confirm': 'Confirmar',
   'Cancel': 'Cancelar',
   'Delete': 'Eliminar',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'Nota: mudar a unidade só muda o rótulo — os números registados não são convertidos.',
   'Data': 'Dados',
   'Export backup (JSON)': 'Exportar cópia (JSON)',
+  'Share backup': 'Partilhar cópia',
   'Import backup': 'Importar cópia',
   'Reset everything?': 'Repor tudo?',
   'Reset everything': 'Repor tudo',

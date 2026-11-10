@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
@@ -6,6 +6,7 @@ import { exOr } from '../lib/exercises.js'
 import { effectiveRoutine, lastEntryFor, bestWeightFor, buildSets, setsDoneActive, supersetUnits, unitOf, setLabel, modeOf, isBw, isPerSide, sideReps, repStep, EFFORT, effortOf, stepEffort, capEffort, defaultConfig } from '../lib/history.js'
 import { fmtNum, fmtDate, todayISO, exCount, DAYN } from '../lib/format.js'
 import { beep, vibrate } from '../lib/sound.js'
+import { haptic } from '../lib/haptic.js'
 import { t } from '../lib/i18n.js'
 import { api } from '../lib/api.js'
 import Media from '../components/Media.jsx'
@@ -21,7 +22,7 @@ function StartChooser() {
   const S = useStore(s => s.S)
   const todayR = effectiveRoutine(S, todayISO())
   const todayOvr = S.dayPlan[todayISO()] !== undefined
-  const others = S.routines.filter(r => r !== todayR)
+  const others = S.routines.filter(r => r !== todayR && !r.archived)
   return <div className="narrow">
     <div className="hdr"><div><h1>{t('Start workout')}</h1><div className="sub">{t(DAYN[new Date().getDay()])} — {todayR ? t('today is {0}', todayR.name) : t('rest day, but no one’s stopping you')}</div></div></div>
     {todayR && <div className="card" style={{ borderColor: 'var(--acc)' }}>
@@ -53,6 +54,67 @@ function Elapsed({ start }) {
   return <span>{t}</span>
 }
 
+/* ---------- inline strength sparkline ---------- */
+function ExerciseSparkline({ workouts, exerciseId, unit, onDetails }) {
+  const points = (workouts || [])
+    .filter(w => (w.entries || []).some(e => e.id === exerciseId))
+    .slice(-7)
+    .map(w => {
+      const ent = w.entries.find(e => e.id === exerciseId)
+      const topW = Math.max(0, ...((ent?.sets || []).filter(s => s.done).map(s => s.w || 0)))
+      return { d: w.d, w: topW }
+    })
+    .filter(p => p.w > 0)
+
+  if (points.length < 2) return null
+
+  const min = Math.min(...points.map(p => p.w))
+  const max = Math.max(...points.map(p => p.w))
+  const range = max - min || 1
+  const w = 260, h = 32, pad = 4
+  const coords = points.map((p, i) => {
+    const x = pad + (i / (points.length - 1)) * (w - 2 * pad)
+    const y = h - pad - ((p.w - min) / range) * (h - 2 * pad)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+
+  const delta = points[points.length - 1].w - points[0].w
+  const deltaSign = delta > 0 ? '+' : ''
+
+  return (
+    <div
+      className="card"
+      style={{ padding: '6px 10px', margin: '4px 0 8px', background: 'var(--surface-2)', cursor: 'pointer' }}
+      onClick={onDetails}
+    >
+      <div className="row between small dim" style={{ marginBottom: 2 }}>
+        <span className="row" style={{ gap: 4, fontSize: 11, fontWeight: 500 }}>
+          <Icon name="chartLine" size={12} style={{ color: 'var(--acc)' }} />
+          {t('Strength curve')} ({points.length} {t('sessions')})
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: delta >= 0 ? 'var(--acc)' : 'var(--red)' }}>
+          {deltaSign}{fmtNum(delta)} {unit}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 26, overflow: 'visible' }}>
+        <polyline
+          fill="none"
+          stroke="var(--acc)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          points={coords}
+        />
+        {points.map((p, i) => {
+          const x = pad + (i / (points.length - 1)) * (w - 2 * pad)
+          const y = h - pad - ((p.w - min) / range) * (h - 2 * pad)
+          return <circle key={i} cx={x} cy={y} r={i === points.length - 1 ? 3.5 : 2} fill={i === points.length - 1 ? 'var(--acc)' : 'var(--surface-3)'} />
+        })}
+      </svg>
+    </div>
+  )
+}
+
 /* ---------- one exercise block (reps: weight×reps · time: a held duration · cardio: duration+speed) ---------- */
 function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemoveSet, onStartTimed }) {
   const S = useStore(s => s.S)
@@ -66,6 +128,41 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
   // The same number the "confirm your working weight" sheet calls your best, so the two
   // never disagree inside one session: heaviest logged set, or the working weight you kept.
   const best = cardio ? 0 : Math.max(bestWeightFor(S, entry.id), (S.exWeights[entry.id] || {}).w || 0)
+  const lpTimer = useRef(null)
+
+  const onCopyDown = fromIdx => {
+    const src = entry.sets[fromIdx]
+    if (!src) return
+    let copied = 0
+    for (let j = fromIdx + 1; j < entry.sets.length; j++) {
+      if (!entry.sets[j].done) {
+        if (src.w !== undefined) onField(j, 'w', src.w)
+        if (src.r !== undefined) onField(j, 'r', src.r)
+        if (src.sec !== undefined) onField(j, 'sec', src.sec)
+        if (src.min !== undefined) onField(j, 'min', src.min)
+        if (src.speed !== undefined) onField(j, 'speed', src.speed)
+        copied++
+      }
+    }
+    if (copied > 0) {
+      haptic('medium')
+      useUI.getState().toast(t('Copied values to {0} sets below', copied))
+    }
+  }
+
+  const startLongPress = i => {
+    cancelLongPress()
+    lpTimer.current = setTimeout(() => {
+      onCopyDown(i)
+    }, 450)
+  }
+
+  const cancelLongPress = () => {
+    if (lpTimer.current) {
+      clearTimeout(lpTimer.current)
+      lpTimer.current = null
+    }
+  }
   // What the progression policy decided for this session, and why (issue #17). Computed when
   // the session was built so the reason matches the numbers already in the rows.
   const plan = entry.plan
@@ -122,26 +219,69 @@ function ExerciseBlock({ entryIdx, compact, onToggle, onField, onAddSet, onRemov
       {(ex.tg || ex.bp) && <span className="tag">{t(ex.tg || ex.bp)}</span>}
       {ex.eq && <span className="tag">{t(ex.eq)}</span>}
       {best > 0 && <span className="tag nocap">{t('Best:')} {fmtNum(best)} {S.unit}</span>}
+      {entry.sets.some(s => s.done && s.w > best && best > 0) && (
+        <span className="tag pr" style={{ borderColor: 'var(--yellow)', fontWeight: 600 }}>
+          <Icon name="trophy" /> {t('New PR!')}
+        </span>
+      )}
     </div>
     {last && <div className="small dim" style={{ marginBottom: 4 }}>{t('Last time')} ({fmtDate(last.d)}): {last.sets.map(s => setLabel(entry.id, s, last.target)).join(', ')}</div>}
     {plan && plan.why && plan.kind !== 'off' && <div className={'progline' + (plan.kind === 'deload' ? ' warn' : '')}>
       <Icon name={plan.kind === 'up' ? 'arrowUp' : plan.kind === 'deload' ? 'arrowDown' : 'lightbulb'} />
       <span>{t(...plan.why)}</span>
     </div>}
+    <ExerciseSparkline workouts={S.workouts} exerciseId={entry.id} unit={S.unit} onDetails={() => exerciseDetailSheet(ex)} />
     <div className="card" style={{ marginTop: 10, marginBottom: 0 }}>
       {/* the header carries the same eff3 sizing as the rows, or the labels drift off their columns */}
       <div className={'sethead' + (col3 ? ' eff3' : '')}><span className="n-sp" /><span className="w-sp">{col1.hd}</span>{col2 && <span className="r-sp">{col2.hd}</span>}{col3 && <span className="eff-sp">{col3.hd}</span>}{timed && <span className="ck-sp" />}<span className="ck-sp" /></div>
-      {entry.sets.map((s, i) => <div key={i} className={'setrow' + (s.done ? ' done' : '') + (col3 ? ' eff3' : '')}>
-        <div className="n">{i + 1}</div>
-        {cell(s, i, col1, 'w')}
-        {col2 && cell(s, i, col2, 'r')}
-        {col3 && cell(s, i, col3, 'eff')}
-        {/* A timed set is started, not typed: the timer counts the hold down and checks the
-            set off itself. The checkbox stays for anyone who timed it on their own watch. */}
-        {timed && <button className="setgo" aria-label={t('Start set')} disabled={s.done || !!working}
-          onClick={() => onStartTimed(i)}><Icon name="play" /></button>}
-        <Check checked={s.done} onChange={() => onToggle(i)} />
-      </div>)}
+      {entry.sets.map((s, i) => {
+        const isPR = s.done && s.w > 0 && best > 0 && s.w > best
+        return (
+          <div
+            key={i}
+            className={'setrow' + (s.done ? ' done' : '') + (col3 ? ' eff3' : '')}
+            onPointerDown={() => startLongPress(i)}
+            onPointerUp={cancelLongPress}
+            onPointerCancel={cancelLongPress}
+            onPointerLeave={cancelLongPress}
+          >
+            <div
+              className="n"
+              title={t('Hold to copy values to sets below')}
+              style={{ position: 'relative', cursor: 'pointer' }}
+            >
+              {i + 1}
+              {isPR && (
+                <span
+                  className="pr"
+                  style={{
+                    position: 'absolute',
+                    top: -6,
+                    left: 14,
+                    fontSize: 9,
+                    padding: '0 4px',
+                    lineHeight: '13px',
+                    borderRadius: 3,
+                    zIndex: 2,
+                    boxShadow: '0 1px 4px rgba(234, 179, 8, 0.4)'
+                  }}
+                  title={t('Personal Record!')}
+                >
+                  <Icon name="trophy" size={9} />PR
+                </span>
+              )}
+            </div>
+            {cell(s, i, col1, 'w')}
+            {col2 && cell(s, i, col2, 'r')}
+            {col3 && cell(s, i, col3, 'eff')}
+            {/* A timed set is started, not typed: the timer counts the hold down and checks the
+                set off itself. The checkbox stays for anyone who timed it on their own watch. */}
+            {timed && <button className="setgo" aria-label={t('Start set')} disabled={s.done || !!working}
+              onClick={() => onStartTimed(i)}><Icon name="play" /></button>}
+            <Check checked={s.done} onChange={() => onToggle(i)} />
+          </div>
+        )
+      })}
       <div style={{ height: 8 }} />
       <div className="row">
         <Button size="sm" icon="minus" disabled={entry.sets.length <= 1} onClick={onRemoveSet}>{t('Remove set')}</Button>
@@ -203,7 +343,7 @@ function ActiveWorkout() {
     mutEntry(idx, e => {
       e.sets[i].done = !e.sets[i].done
       if (e.sets[i].done) {
-        beep(S.sound, 1040, 0.12); vibrate(30)
+        beep(S.sound, 1040, 0.12); vibrate([15, 40, 20])
         const isLastExInUnit = idx === unit[unit.length - 1]
         const unitDone = unit.every(ui => (ui === idx ? e : A.entries[ui]).sets.every(x => x.done))
         if (isLastExInUnit && !unitDone) {

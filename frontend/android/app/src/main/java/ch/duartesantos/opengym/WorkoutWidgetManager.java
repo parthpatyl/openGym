@@ -506,7 +506,7 @@ public class WorkoutWidgetManager {
 
             // Progress bar: edge-to-edge (match_parent → use max widget content width ~360dp)
             int total = Math.max(1, timerManager.getTotalDurationSec());
-            float progressPercent = ((float) (total - remaining)) / ((float) total);
+            float progressPercent = ((float) remaining) / ((float) total);
             Bitmap barBmp = createProgressBarBitmap(context, themeColor, trackColor, 360, 5, progressPercent, 2.5f);
             if (barBmp != null) {
                 views.setImageViewBitmap(R.id.widget_rest_progress_bar, barBmp);

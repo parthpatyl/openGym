@@ -1,5 +1,18 @@
 // Russian UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': 'Значения скопированы в {0} подходов ниже',
+  'Strength curve': 'Кривая силы',
+  'sessions': 'тренировок',
+  'Hold to copy values to sets below': 'Удерживайте для копирования в подходы ниже',
+  'Personal Record!': 'Личный рекорд!',
+  'Milestones & Personal Records!': 'Достижения и личные рекорды!',
+  'NEW PR': 'НОВЫЙ РЕКОРД',
+  'Best 1RM': 'Лучший 1RM',
+  'Muscle Recovery': 'Восстановление мышц',
+  'Fully Recovered': 'Полностью восстановлен',
+  '{0} recovering': '{0} восстанавливаются',
+  'All muscle groups are rested and primed for heavy work.': 'Все группы мышц отдохнули и готовы к нагрузкам.',
+
   'Confirm': 'Подтвердить',
   'Cancel': 'Отмена',
   'Delete': 'Удалить',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': 'Примечание: смена единиц меняет только подпись — записанные числа не пересчитываются.',
   'Data': 'Данные',
   'Export backup (JSON)': 'Экспорт резервной копии (JSON)',
+  'Share backup': 'Поделиться резервной копией',
   'Import backup': 'Импорт резервной копии',
   'Reset everything?': 'Сбросить всё?',
   'Reset everything': 'Сбросить всё',

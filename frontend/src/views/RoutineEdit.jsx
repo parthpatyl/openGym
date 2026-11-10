@@ -1,12 +1,13 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useStore } from '../store/useStore.js'
 import { exOr } from '../lib/exercises.js'
 import { uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import { supersetUnits, cleanupSg, exLine } from '../lib/history.js'
 import { Thumb } from '../components/Media.jsx'
-import { glyphPicker, exercisePicker, exConfigSheet, confirmSheet } from '../sheets.jsx'
+import { haptic } from '../lib/haptic.js'
+import { glyphPicker, exercisePicker, exConfigSheet, confirmSheet, mergeSplitsSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { glyphOf } from '../lib/glyphs.js'
 import { Button, SelectRow } from '../components/ui.jsx'
@@ -25,6 +26,82 @@ export default function RoutineEdit() {
 
   const edit = fn => update(s => { fn(s.routines.find(x => x.id === id).ex) })
   const move = (i, dir) => edit(ex => { const j = i + dir; if (j < 0 || j >= ex.length) return;[ex[i], ex[j]] = [ex[j], ex[i]]; cleanupSg(ex) })
+  const reorder = (fromIdx, toIdx) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
+    edit(ex => {
+      const [item] = ex.splice(fromIdx, 1)
+      ex.splice(toIdx, 0, item)
+      cleanupSg(ex)
+    })
+  }
+
+  const [dragState, setDragState] = useState(null)
+  const dragRef = useRef(null)
+  const itemRefs = useRef([])
+
+  const handleDragStart = (i, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startY = e.clientY
+    const rects = itemRefs.current.map(el => (el ? el.getBoundingClientRect() : null))
+    const itemHeight = rects[i]?.height || 64
+
+    dragRef.current = {
+      from: i,
+      to: i,
+      startY,
+      rects,
+      itemHeight,
+      pointerId: e.pointerId
+    }
+    haptic('light')
+    setDragState({ from: i, to: i, deltaY: 0 })
+
+    const onPointerMove = ev => {
+      if (!dragRef.current) return
+      const dy = ev.clientY - dragRef.current.startY
+      const currentY = ev.clientY
+      const rects = dragRef.current.rects
+
+      let to = dragRef.current.from
+      for (let j = 0; j < rects.length; j++) {
+        if (!rects[j]) continue
+        const mid = rects[j].top + rects[j].height / 2
+        if (j < dragRef.current.from && currentY < mid) {
+          to = j
+          break
+        } else if (j > dragRef.current.from && currentY > mid) {
+          to = j
+        }
+      }
+
+      if (to !== dragRef.current.to) {
+        haptic('light')
+      }
+      dragRef.current.to = to
+      setDragState({ from: dragRef.current.from, to, deltaY: dy })
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+
+      if (dragRef.current) {
+        const { from, to } = dragRef.current
+        dragRef.current = null
+        setDragState(null)
+        if (from !== to) {
+          haptic('medium')
+          reorder(from, to)
+        }
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: false })
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+  }
   const toggleLink = i => edit(ex => {
     if (i < 1) return
     const cur = ex[i], prev = ex[i - 1]
@@ -56,28 +133,86 @@ export default function RoutineEdit() {
       {t('Applies to every exercise in this routine that does not set its own rule.')}
     </div>
 
-    {r.ex.length ? <div className="list">{r.ex.map((e, i) => {
-      // An unresolvable id is shown rather than skipped — hiding it left an entry you
-      // could neither see nor delete, but that still turned up in the workout.
-      const ex = exOr(e.id)
-      const linkedPrev = i > 0 && e.sg && r.ex[i - 1].sg === e.sg
-      return <div key={i}>
-        {unitFirst.has(i) && <div className="ss-label"><Icon name="link" />{t('Superset')}</div>}
-        <div className={'item' + (inSS.has(i) ? ' in-ss' : '')} onClick={() => {
-          exConfigSheet(ex, e, cfg => edit(x => { x[i] = { id: x[i].id, sg: x[i].sg, ...cfg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)
-        }}>
-          <Thumb ex={ex} />
-          <div className="grow"><div className="tt capitalize">{ex.n}</div><div className="ss">{exLine(e, S.unit)}</div></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 'none', alignItems: 'center' }}>
-            {i > 0 && <button className={'iconbtn' + (linkedPrev ? ' on-ss' : '')} title={t('Superset with exercise above')} style={{ width: 32, height: 28, borderRadius: 8, fontSize: 15 }} onClick={ev => { ev.stopPropagation(); toggleLink(i) }}><Icon name="link" /></button>}
-            <div style={{ display: 'flex', gap: 2 }}>
-              <button className="iconbtn" aria-label="Move up" style={{ width: 28, height: 24, borderRadius: 7, fontSize: 12 }} onClick={ev => { ev.stopPropagation(); move(i, -1) }}><Icon name="chevronUp" /></button>
-              <button className="iconbtn" aria-label="Move down" style={{ width: 28, height: 24, borderRadius: 7, fontSize: 12 }} onClick={ev => { ev.stopPropagation(); move(i, 1) }}><Icon name="chevronDown" /></button>
+    {r.ex.length ? (
+      <div className="list" style={{ gap: 8 }}>
+        {r.ex.map((e, i) => {
+          const ex = exOr(e.id)
+          const linkedPrev = i > 0 && e.sg && r.ex[i - 1].sg === e.sg
+          const isDragging = dragState?.from === i
+
+          let translateY = 0
+          if (dragState) {
+            if (isDragging) {
+              translateY = dragState.deltaY
+            } else if (dragState.from < dragState.to && i > dragState.from && i <= dragState.to) {
+              translateY = -((dragRef.current?.itemHeight || 64) + 8)
+            } else if (dragState.from > dragState.to && i < dragState.from && i >= dragState.to) {
+              translateY = (dragRef.current?.itemHeight || 64) + 8
+            }
+          }
+
+          return (
+            <div
+              key={i}
+              ref={el => (itemRefs.current[i] = el)}
+              style={{
+                position: 'relative',
+                transform: translateY ? `translateY(${translateY}px)` : 'none',
+                transition: isDragging ? 'none' : 'transform 0.18s ease-out',
+                zIndex: isDragging ? 50 : 1,
+                boxShadow: isDragging ? '0 10px 25px rgba(0,0,0,0.5)' : 'none',
+                opacity: isDragging ? 0.95 : 1
+              }}
+            >
+              {unitFirst.has(i) && <div className="ss-label"><Icon name="link" />{t('Superset')}</div>}
+              <div
+                className={'item' + (inSS.has(i) ? ' in-ss' : '')}
+                onClick={() => {
+                  if (!dragState) {
+                    exConfigSheet(ex, e, cfg => edit(x => { x[i] = { id: x[i].id, sg: x[i].sg, ...cfg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)
+                  }
+                }}
+              >
+                <Thumb ex={ex} />
+                <div className="grow"><div className="tt capitalize">{ex.n}</div><div className="ss">{exLine(e, S.unit)}</div></div>
+                <div style={{ display: 'flex', gap: 6, flex: 'none', alignItems: 'center' }}>
+                  {i > 0 && (
+                    <button
+                      className={'iconbtn' + (linkedPrev ? ' on-ss' : '')}
+                      title={t('Superset with exercise above')}
+                      style={{ width: 34, height: 34, borderRadius: 8, fontSize: 15 }}
+                      onClick={ev => { ev.stopPropagation(); toggleLink(i) }}
+                    >
+                      <Icon name="link" />
+                    </button>
+                  )}
+                  <div
+                    className="iconbtn"
+                    style={{
+                      width: 36,
+                      height: 38,
+                      borderRadius: 8,
+                      cursor: 'grab',
+                      touchAction: 'none',
+                      color: isDragging ? 'var(--acc)' : 'var(--dim)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={t('Drag to reorder')}
+                    onPointerDown={ev => handleDragStart(i, ev)}
+                  >
+                    <Icon name="grip" />
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )
+        })}
       </div>
-    })}</div> : <div className="empty"><div className="ico"><Icon name="dumbbell" /></div>{t('No exercises yet — add your first one.')}</div>}
+    ) : (
+      <div className="empty"><div className="ico"><Icon name="dumbbell" /></div>{t('No exercises yet — add your first one.')}</div>
+    )}
 
     {/* Coverage of the routine as planned, so a gap shows up while you're building it
         rather than after a month of training around it. */}
@@ -95,6 +230,30 @@ export default function RoutineEdit() {
 
     <div className="small dim row" style={{ margin: '10px 2px', gap: 5 }}><Icon name="link" style={{ fontSize: 13 }} />{t('Tap the link button on an exercise to superset it with the one above — you’ll do them back-to-back.')}</div>
     <Button variant="primary" onClick={() => exercisePicker(ex => exConfigSheet(ex, null, cfg => edit(x => { x.push({ id: ex.id, ...cfg }) }), null, r))} icon="plus">{t('Add exercise')}</Button>
+    <div style={{ height: 10 }} />
+    {S.routines.length >= 2 && <>
+      <Button variant="tinted" icon="shuffle" onClick={() => mergeSplitsSheet(id)}>{t('Merge with another split')}</Button>
+      <div style={{ height: 10 }} />
+    </>}
+    {r.archived ? (
+      <Button variant="tinted" icon="reset" onClick={() => {
+        update(s => {
+          const target = s.routines.find(x => x.id === id)
+          if (target) delete target.archived
+        })
+        nav('/plan')
+      }}>{t('Restore routine to active')}</Button>
+    ) : (
+      <Button variant="tinted" icon="folder" onClick={() => {
+        update(s => {
+          const target = s.routines.find(x => x.id === id)
+          if (target) target.archived = true
+          Object.keys(s.week).forEach(k => { if (s.week[k] === id) delete s.week[k] })
+          Object.keys(s.dayPlan).forEach(k => { if (s.dayPlan[k] === id) delete s.dayPlan[k] })
+        })
+        nav('/plan')
+      }}>{t('Archive routine')}</Button>
+    )}
     <div style={{ height: 10 }} />
     <Button variant="danger" onClick={() => confirmSheet({
       title: t('Delete routine?'), message: t('“{0}” and its exercises will be removed.', r.name), confirmText: t('Delete'), danger: true,

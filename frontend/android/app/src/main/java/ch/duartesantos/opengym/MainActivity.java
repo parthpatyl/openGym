@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RestTimerPlugin.class);
         registerPlugin(WorkoutWidgetPlugin.class);
+        registerPlugin(NativeStoragePlugin.class);
         super.onCreate(savedInstanceState);
 
         RestTimerManager.getInstance(this);
@@ -48,5 +49,3 @@ public class MainActivity extends BridgeActivity {
         WorkoutWidgetManager.updateAllWidgets(this);
     }
 }
-
-

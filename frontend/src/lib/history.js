@@ -167,7 +167,8 @@ export function effectiveRoutineId(S, iso) {
 }
 export function effectiveRoutine(S, iso) {
   const id = effectiveRoutineId(S, iso)
-  return id ? S.routines.find(r => r.id === id) || null : null
+  const r = id ? S.routines.find(r => r.id === id) || null : null
+  return r && !r.archived ? r : null
 }
 export function buildSets(S, cfg) {
   const last = lastEntryFor(S, cfg.id)

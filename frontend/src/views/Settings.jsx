@@ -9,7 +9,7 @@ import { pushSupported, enablePush, disablePush, sendTestPush } from '../lib/pus
 import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
-import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
+import { MOBILE, shareExport, saveBackupToFilePicker, openBackupFromFilePicker, syncReminder } from '../lib/mobile.js'
 import { loadStarterPlan, confirmSheet, importFromApp } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
@@ -27,26 +27,63 @@ export default function Settings() {
   const doExport = async () => {
     const json = JSON.stringify(S, null, 2)
     const name = 'opengym-backup-' + todayISO() + '.json'
-    // WKWebView can't download blob URLs — the native build hands the file to the share sheet.
     if (MOBILE) {
-      try { await shareExport(json, name); toast(t('Backup exported')) } catch (e) { /* share sheet dismissed */ }
+      try {
+        await saveBackupToFilePicker(json, name)
+        toast(t('Backup exported'))
+      } catch (e) {
+        /* file picker dismissed or cancelled */
+      }
       return
     }
     const blob = new Blob([json], { type: 'application/json' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href)
     toast(t('Backup exported'))
   }
+  const doShare = async () => {
+    const json = JSON.stringify(S, null, 2)
+    const name = 'opengym-backup-' + todayISO() + '.json'
+    try {
+      await shareExport(json, name)
+      toast(t('Backup exported'))
+    } catch (e) { /* share sheet dismissed */ }
+  }
+  const processBackupJson = text => {
+    try {
+      const data = JSON.parse(text)
+      if (!data.workouts || !data.routines) throw new Error('not an openGym backup')
+      confirmSheet({
+        title: t('Import backup?'),
+        message: t('This replaces all current data with the backup file.'),
+        confirmText: t('Import'),
+        danger: true,
+        onConfirm: () => {
+          replaceState(Object.assign(JSON.parse(JSON.stringify(DEF)), data), true)
+          toast(t('Backup imported'))
+        }
+      })
+    } catch (e) { toast(t('Import failed: {0}', e.message)) }
+  }
+  const handleImportClick = async () => {
+    if (MOBILE) {
+      try {
+        const text = await openBackupFromFilePicker()
+        if (text) {
+          processBackupJson(text)
+          return
+        }
+      } catch (e) {
+        // Fall back to standard file picker
+      }
+    }
+    fileRef.current?.click()
+  }
   const doImport = ev => {
     const f = ev.target.files[0]; if (!f) return
     const rd = new FileReader()
-    rd.onload = () => {
-      try {
-        const data = JSON.parse(rd.result)
-        if (!data.workouts || !data.routines) throw new Error('not an openGym backup')
-        confirmSheet({ title: t('Import backup?'), message: t('This replaces all current data with the backup file.'), confirmText: t('Import'), danger: true, onConfirm: () => { replaceState(Object.assign(JSON.parse(JSON.stringify(DEF)), data), true); toast(t('Backup imported')) } })
-      } catch (e) { toast(t('Import failed: {0}', e.message)) }
-    }
+    rd.onload = () => processBackupJson(rd.result)
     rd.readAsText(f)
+    ev.target.value = ''
   }
   const signInHere = async () => {
     try { const u = await passkeyLogin(); setUser(u); await pullState(); toast(t('Welcome back, {0}', u.name)) }
@@ -192,8 +229,9 @@ export default function Settings() {
       <Row icon="shuffle" iconTint="var(--teal)" title={t('Import from another app')}
         subtitle={t('FitNotes, Strong, Hevy — or body weight from Apple Health')}
         accessory="chevron" onClick={() => importRef.current.click()} />
-      <Row icon="upload" iconTint="var(--blue)" title={t('Import backup')} accessory="chevron" onClick={() => fileRef.current.click()} />
+      <Row icon="upload" iconTint="var(--blue)" title={t('Import backup')} accessory="chevron" onClick={handleImportClick} />
       <Row icon="download" iconTint="var(--blue)" title={t('Export backup (JSON)')} accessory="chevron" onClick={doExport} />
+      {MOBILE && <Row icon="share" iconTint="var(--blue)" title={t('Share backup')} accessory="chevron" onClick={doShare} />}
       <Row icon="trash" iconTint="var(--red)" title={t('Reset everything')} danger onClick={() => confirmSheet({ title: t('Reset everything?'), message: t('Deletes your plan, workouts and body weight on this device. This cannot be undone.'), confirmText: t('Delete everything'), danger: true, onConfirm: () => { replaceState(JSON.parse(JSON.stringify(DEF)), true); nav('/home'); toast(t('All data reset')) } })} />
     </Section>
     <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={doImport} />

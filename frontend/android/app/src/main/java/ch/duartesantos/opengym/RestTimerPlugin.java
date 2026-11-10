@@ -44,4 +44,18 @@ public class RestTimerPlugin extends Plugin {
         manager.stop();
         call.resolve();
     }
+
+    @PluginMethod
+    public void getRestState(PluginCall call) {
+        JSObject ret = new JSObject();
+        boolean running = manager.isRunning();
+        ret.put("running", running);
+        ret.put("remaining", manager.getRemainingSeconds());
+        ret.put("total", manager.getTotalDurationSec());
+        ret.put("endsAt", manager.getEndsAtMs());
+        ret.put("exercise", manager.getExerciseName());
+        ret.put("set", manager.getSetInfo());
+        ret.put("accentColor", manager.getAccentColor());
+        call.resolve(ret);
+    }
 }

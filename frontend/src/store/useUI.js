@@ -62,23 +62,41 @@ export const useUI = create((set, get) => ({
     timerInt = setInterval(timerTick, 1000)
     document.addEventListener('visibilitychange', timerTick)
   },
-  addRest(sec) {
+  addRest(sec, fromNative = false) {
     const tm = get().timer
     if (!tm) return
     const left = tm.left + sec
     // taking off more than is left means "I'm ready now" — same as skipping, and it keeps a
     // negative duration out of both the progress bar and the server-side push schedule
-    if (left <= 0) { get().stopRest(); return }
+    if (left <= 0) { get().stopRest(fromNative); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
-    addRestNotification(sec)
+    if (!fromNative) addRestNotification(sec)
   },
-  stopRest() {
+  stopRest(fromNative = false) {
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
     if (get().timer) cancelPushRestTimer()
-    cancelRestNotification()
+    if (!fromNative) cancelRestNotification()
     set({ timer: null })
+  },
+  syncRestFromNative(st) {
+    if (!st || !st.running) {
+      if (get().timer) get().stopRest(true)
+      return
+    }
+    const endsAt = st.endsAt || (Date.now() + (st.remaining || 0) * 1000)
+    const left = Math.max(0, Math.round((endsAt - Date.now()) / 1000))
+    if (left <= 0) {
+      get().stopRest(true)
+      return
+    }
+    const current = get().timer
+    if (!current) {
+      get().startRest(left, { exercise: st.exercise, set: st.set })
+    } else {
+      set({ timer: { ...current, left, total: Math.max(current.total, st.total || left), endsAt } })
+    }
   },
 
   /* ---- work timer (issue #16) ----

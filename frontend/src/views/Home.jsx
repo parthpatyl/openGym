@@ -6,6 +6,8 @@ import { fmtNum, fmtDate, todayISO, isoOf, weekKey, DAYS } from '../lib/format.j
 import { t, dateLocale } from '../lib/i18n.js'
 import { bwSheet, goalSheet, dayOverrideSheet, calendarSheet, startFlow, loadStarterPlan, bwDeltaColor } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
+import BodyMap from '../components/BodyMap.jsx'
+import { calculateMuscleRecovery } from '../lib/recovery.js'
 import Icon from '../components/Icon.jsx'
 import { Button } from '../components/ui.jsx'
 import { glyphOf } from '../lib/glyphs.js'
@@ -80,6 +82,52 @@ export default function Home() {
         </div>
       )}
     </div>
+
+    {S.workouts.length > 0 && (() => {
+      const rec = calculateMuscleRecovery(S.workouts)
+      const needRest = rec.fatigued.length + rec.recovering.length
+      return (
+        <div className="card">
+          <div className="row between" style={{ marginBottom: 8 }}>
+            <div className="row" style={{ gap: 7, fontSize: 17, fontWeight: 600 }}>
+              <Icon name="heart" style={{ color: rec.fatigued.length > 0 ? 'var(--red)' : rec.recovering.length > 0 ? 'var(--yellow)' : 'var(--acc)' }} />
+              <span>{t('Muscle Recovery')}</span>
+            </div>
+            <span className="tag" style={{
+              background: rec.fatigued.length > 0 ? 'rgba(239, 68, 68, 0.15)' : rec.recovering.length > 0 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+              color: rec.fatigued.length > 0 ? 'var(--red)' : rec.recovering.length > 0 ? 'var(--yellow)' : 'var(--acc)',
+              border: 'none',
+              fontWeight: 600
+            }}>
+              {needRest === 0 ? t('Fully Recovered') : t('{0} recovering', needRest)}
+            </span>
+          </div>
+
+          <div style={{ maxWidth: 220, margin: '6px auto 10px' }}>
+            <BodyMap colorMap={rec.colorMap} body={user?.body || S.body} />
+          </div>
+
+          {(rec.fatigued.length > 0 || rec.recovering.length > 0) ? (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {rec.fatigued.map(f => (
+                <span key={f.slug} className="tag" style={{ background: 'rgba(239, 68, 68, 0.12)', color: 'var(--red)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <span style={{ textTransform: 'capitalize' }}>{t(f.slug)}</span> · ~{f.hoursLeft}h
+                </span>
+              ))}
+              {rec.recovering.map(r => (
+                <span key={r.slug} className="tag" style={{ background: 'rgba(245, 158, 11, 0.12)', color: 'var(--yellow)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                  <span style={{ textTransform: 'capitalize' }}>{t(r.slug)}</span> · ~{r.hoursLeft}h
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="dim small" style={{ textAlign: 'center' }}>
+              {t('All muscle groups are rested and primed for heavy work.')}
+            </div>
+          )}
+        </div>
+      )
+    })()}
 
     {!S.routines.length && !S.active && (
       <div className="card">

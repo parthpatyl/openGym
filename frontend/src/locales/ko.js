@@ -1,5 +1,18 @@
 // Korean UI strings. Keys are the English source strings (see lib/i18n.js).
 export default {
+  'Copied values to {0} sets below': '아래 {0}개 세트에 복사됨',
+  'Strength curve': '근력 곡선',
+  'sessions': '세션',
+  'Hold to copy values to sets below': '길게 눌러 아래 세트에 값 복사',
+  'Personal Record!': '개인 최고 기록!',
+  'Milestones & Personal Records!': '마일스톤 & 개인 기록!',
+  'NEW PR': '새로운 PR',
+  'Best 1RM': '최고 1RM',
+  'Muscle Recovery': '근육 회복 상태',
+  'Fully Recovered': '완전 회복됨',
+  '{0} recovering': '{0}개 회복 중',
+  'All muscle groups are rested and primed for heavy work.': '모든 근육이 회복되어 운동할 준비가 되었습니다.',
+
   'Confirm': '확인',
   'Cancel': '취소',
   'Delete': '삭제',
@@ -258,6 +271,7 @@ export default {
   'Note: switching units only changes the label — logged numbers are not converted.': '참고: 단위 변경은 표기만 바꿉니다 — 기록된 숫자는 환산되지 않아요.',
   'Data': '데이터',
   'Export backup (JSON)': '백업 내보내기 (JSON)',
+  'Share backup': '백업 공유',
   'Import backup': '백업 가져오기',
   'Reset everything?': '전부 초기화할까요?',
   'Reset everything': '전부 초기화',
